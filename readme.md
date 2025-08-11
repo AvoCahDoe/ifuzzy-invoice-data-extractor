@@ -114,4 +114,5 @@ Issues and pull requests are welcome. For major changes, open an issue to discus
 ## Author
 
 Developed by Baka Mohamed
+
 Contact: bakamoohamed@gmail.com
