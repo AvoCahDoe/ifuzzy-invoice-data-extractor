@@ -26,8 +26,8 @@ Users can upload invoices in PDF or image format (PNG/JPEG). The frontend sends 
 
 ### 1) Clone
 ```bash
-git clone https://github.com/YOUR_USERNAME/invoice-data-extraction.git
-cd invoice-data-extraction
+git clone https://github.com/medbakaaa/invoice-data-extractor.git
+cd invoice-data-extractor
 ```
 
 ---
