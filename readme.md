@@ -15,7 +15,8 @@ Users can upload invoices in PDF or image format (PNG/JPEG). The frontend sends 
 
 ## Demo Video
 
-[Watch the Demo](demo/demo.mp4)
+<video src="demo/demo.mp4" controls autoplay muted loop style="max-width:100%;height:auto;"></video>
+
 
 ## Prerequisites
 
