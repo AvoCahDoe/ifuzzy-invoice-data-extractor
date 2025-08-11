@@ -1,89 +1,117 @@
-# Invoice Data Extraction (Angular + SSR)
+# Invoice Data Extraction (Angular + SSR + FastAPI)
 
-This project is a full-stack invoice data extraction tool with a frontend built using Angular Standalone with Server-Side Rendering (SSR).
-It allows users to upload invoices in PDF or image format (PNG/JPEG), sends them to a backend extraction service, and displays the extracted fields.
+This repository contains a full-stack invoice data extraction tool:
+- Frontend: Angular Standalone with Server-Side Rendering (SSR)
+- Backend: FastAPI service for invoice data extraction
+
+Users can upload invoices in PDF or image format (PNG/JPEG). The frontend sends the file to the backend for parsing and extraction, then renders the extracted fields.
 
 ## Features
 
-- File Upload Interface: Upload invoices in `.pdf`, `.png`, `.jpeg`, or `.jpg` format.
-- Automatic Field Extraction: Extracts key invoice details such as:
-  - Document Type
-  - Currency
-  - Payment Method
-  - Invoice Number
-  - Invoice Date
-  - Due Date
-  - Total Amount
-  - Tax Amount
-- Responsive UI with simple styling for quick deployment.
-- Server-Side Rendering (SSR) for better SEO and initial load performance.
+- Upload invoices in `.pdf`, `.png`, `.jpeg`, or `.jpg`
+- Extraction of key fields: document type, currency, payment method, invoice number, invoice date, due date, total amount, tax amount
+- Server-Side Rendering for faster first paint and SEO
+- Simple, responsive UI
 
-## Tech Stack
+## Demo Video
 
-### Frontend
-- Angular (Standalone components)
-- Angular Universal for SSR
-- HTML5, CSS3
+[Watch the Demo](demo/demo.mp4)
 
-### Backend
-- Connects to a FastAPI or other API service for invoice data extraction.
+## Prerequisites
+
+- Node.js 18+ and npm
+- Python 3.9+
 
 ## Getting Started
 
-### 1. Install Dependencies
+### 1) Clone
 ```bash
+git clone https://github.com/YOUR_USERNAME/invoice-data-extraction.git
+cd invoice-data-extraction
+```
+
+---
+
+## Frontend (Angular + SSR)
+
+### Install dependencies
+```bash
+cd frontend
 npm install
 ```
 
-### 2. Development Server
-Run the application in browser mode:
+### Development server
+Browser mode:
 ```bash
 npm run dev
 ```
-Or with SSR enabled:
+SSR mode:
 ```bash
 npm run dev:ssr
 ```
 
-### 3. Build
+### Build
 ```bash
-# Build browser bundle
 npm run build
-
-# Build with SSR
+# or
 npm run build:ssr
 ```
 
-### 4. Run Production SSR Server
+### Run production SSR server
 ```bash
 npm run serve:ssr
 ```
 
-## Configuration
+---
 
-The frontend is configured to connect to a backend extraction API.
-You can update API URLs or environment variables in your Angular service files or environment config.
+## Backend (FastAPI)
 
-## Screenshots
-
-Invoice Upload Form
-```
-[User uploads an invoice via form]
-```
-
-Extracted Fields Display
-```
-Document Type: Invoice
-Currency: USD
-...
+### Create and activate a virtual environment
+```bash
+cd backend
+python -m venv venv
+# Windows
+venv\Scripts\activate
+# macOS/Linux
+source venv/bin/activate
 ```
 
-## License
-This project is licensed under the MIT License — see the LICENSE file for details.
+### Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### Run the server
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The backend will listen on:
+```
+http://localhost:8000
+```
+
+### Expected API endpoints (example)
+Your implementation may differ; adjust to your code.
+- `POST /extract` – multipart form-data with file field, returns JSON with extracted fields
+- `GET /health` – returns a simple health check JSON
+
+---
+
+## Project Notes
+
+- Ensure CORS is enabled in the backend for local development if the frontend runs on a different origin.
+- For production, configure a reverse proxy (e.g., Nginx) to route `/api` to FastAPI and serve Angular SSR on `/`.
+
+---
+
+
 
 ## Contributing
-Pull requests are welcome. For major changes, please open an issue first to discuss your ideas.
+
+Issues and pull requests are welcome. For major changes, open an issue to discuss your proposal first.
 
 ## Author
+
 Developed by Baka Mohamed
 Contact: bakamoohamed@gmail.com
