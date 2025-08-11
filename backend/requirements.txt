@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+motor
+pymongo
+pillow
+python-multipart
+ollama
+marker-pdf[full]

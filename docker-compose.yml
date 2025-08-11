@@ -1,0 +1,55 @@
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo
+      - ollama
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+      - OLLAMA_HOST=http://ollama:11434
+    networks:
+      - app_net
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "4200:4000"
+    depends_on:
+      - backend
+    networks:
+      - app_net
+
+  mongo:
+    image: mongo:6
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - app_net
+    
+  ollama:
+      build:
+        context: .
+        dockerfile: ollama.Dockerfile
+      ports:
+        - "11434:11434"
+      volumes:
+        - ollama_data:/root/.ollama
+      networks:
+        - app_net
+      restart: always
+
+
+volumes:
+  mongo_data:
+  ollama_data:
+
+networks:
+  app_net:

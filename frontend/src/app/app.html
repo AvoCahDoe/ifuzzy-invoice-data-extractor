@@ -1,0 +1,141 @@
+<div class="layout">
+  <!-- Champs extraits -->
+  <div class="extracted-fields">
+    <h2>Champs extraits</h2>
+
+    <div class="loading-container" *ngIf="loading">
+      <div class="spinner"></div>
+      <p class="loading-text">Extraction en cours...</p>
+    </div>
+
+    <div class="fields-grid">
+      <div class="field">
+        <label>Type de document</label>
+        <input type="text" [(ngModel)]="extracted.document_type" [disabled]="loading" />
+      </div>
+      <div class="field">
+        <label>Devise</label>
+        <input type="text" [(ngModel)]="extracted.currency" [disabled]="loading" />
+      </div>
+      <div class="field">
+        <label>Méthode de paiement</label>
+        <input type="text" [(ngModel)]="extracted.payment_method" [disabled]="loading" />
+      </div>
+      <div class="field">
+        <label>Numéro de facture</label>
+        <input type="text" [(ngModel)]="extracted.invoice_number" [disabled]="loading" />
+      </div>
+      <div class="field">
+        <label>Date</label>
+        <input type="text" [(ngModel)]="extracted.invoice_date" [disabled]="loading" />
+      </div>
+      <div class="field">
+        <label>Date d'échéance</label>
+        <input type="text" [(ngModel)]="extracted.due_date" [disabled]="loading" />
+      </div>
+      <div class="field">
+        <label>Total</label>
+        <input type="text" [(ngModel)]="extracted.total_amount" [disabled]="loading" />
+      </div>
+      <div class="field">
+        <label>TVA</label>
+        <input type="text" [(ngModel)]="extracted.tax_amount" [disabled]="loading" />
+      </div>
+    </div>
+    <div class="table-wrapper" *ngIf="extracted.line_items">
+
+    <table class="line-items-table">
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Quantité</th>
+          <th>Prix unitaire</th>
+          <th>Emballage</th>
+          <th>Unité</th>
+          <th>Total (HT)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of extracted.line_items">
+          <td><input type="text" [(ngModel)]="item.name" /></td>
+          <td><input type="text" [(ngModel)]="item.quantity" /></td>
+          <td><input type="text" [(ngModel)]="item.unit_price" /></td>
+          <td><input type="text" [(ngModel)]="item.packaging" /></td>
+          <td><input type="text" [(ngModel)]="item.unit" /></td>
+          <td><input type="text" [(ngModel)]="item.total_ht" /></td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="confirm-button-container" *ngIf="!loading && extracted.invoice_date">
+      <button (click)="onConfirmEdit()">Confirmer les modifications</button>
+    </div>
+
+    
+  </div>
+
+  <!-- Zone d'upload -->
+   <!-- Toggle button to reopen sidebar -->
+<button class="toggle-sidebar-btn" *ngIf="sidebarCollapsed" (click)="toggleSidebar()">📎 Pièces jointes</button>
+
+<!-- Zone d'upload (sidebar) -->
+<div class="upload-zone" [class.collapsed]="sidebarCollapsed">
+  <h2>Pièces jointes</h2>
+
+  <label for="file-upload" class="drop-area">
+    <input id="file-upload" type="file" accept=".pdf,.png,.jpeg,.jpg" hidden (change)="onFileChange($event)" />
+    <div class="upload-instruction">
+      <p>Déposez votre facture<br>(PDF, PNG ou JPEG)</p>
+      <button type="button" (click)="triggerFileInput()">Sélectionnez un fichier</button>
+    </div>
+  </label>
+
+  <div class="upload-controls">
+    <p *ngIf="selectedFile">{{ selectedFile.name }}</p>
+    <button (click)="onSubmit()" [disabled]="!selectedFile">Extraire les données</button>
+  </div>
+
+  <div class="preview" *ngIf="filePreviewUrl">
+    <h4>Prévisualisation :</h4>
+
+    <!-- Image preview -->
+    <img *ngIf="isImage" [src]="filePreviewUrl" style="max-width: 100%; height: auto;" />
+
+    <!-- PDF preview via iframe -->
+    <iframe 
+      *ngIf="isPdf && isBrowser" 
+      [attr.src]="filePreviewUrl"
+      width="100%"
+      height="500px"
+      type="application/pdf"
+      >
+    </iframe>
+    </div>
+
+  <!-- Close sidebar button -->
+  <button class="close-btn" (click)="toggleSidebar()">✖</button>
+</div>
+
+  <!-- <div class="upload-zone">
+    <h2>Pièces jointes</h2>
+
+    <label for="file-upload" class="drop-area">
+      <input id="file-upload" type="file" accept=".pdf,.png,.jpeg,.jpg" hidden (change)="onFileChange($event)" />
+      <div class="upload-instruction">
+        <p>Déposez votre facture<br>(PDF, PNG ou JPEG)</p>
+        <button type="button" (click)="triggerFileInput()">Sélectionnez un fichier</button>
+      </div>
+    </label>
+
+    <div class="upload-controls">
+      <p *ngIf="selectedFile">{{ selectedFile.name }}</p>
+      <button (click)="onSubmit()" [disabled]="!selectedFile">Extraire les données</button>
+    </div>
+
+    <div class="preview" *ngIf="filePreviewUrl">
+      <h4>Prévisualisation :</h4>
+      <img *ngIf="isImage" [src]="filePreviewUrl" />
+      <embed *ngIf="isPdf" [src]="filePreviewUrl" type="application/pdf" width="100%" height="500px" />
+    </div>
+  </div> -->
+</div>
