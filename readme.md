@@ -1,181 +1,89 @@
-# Moroccan Official Gazette Scraper API Documentation
+# Invoice Data Extraction (Angular + SSR)
 
-## Overview
-
-The Moroccan Official Gazette Scraper is a FastAPI-based web service that scrapes bulletin data from the official Moroccan government gazette website (sgg.gov.ma). It provides endpoints to retrieve bulletin information in both French and Arabic languages, with options to filter by date range and bulletin type.
+This project is a full-stack invoice data extraction tool with a frontend built using Angular Standalone with Server-Side Rendering (SSR).
+It allows users to upload invoices in PDF or image format (PNG/JPEG), sends them to a backend extraction service, and displays the extracted fields.
 
 ## Features
 
-- **Multi-language support**: French (`fr`) and Arabic (`ar`)
-- **Bulletin type filtering**: General, International, or All bulletins
-- **Date range filtering**: Retrieve bulletins within specific date ranges
-- **CSV export**: Download scraped data as CSV files
-- **CORS enabled**: Ready for frontend integration
-- **Robust date parsing**: Handles various date formats including pre-1970 dates
+- File Upload Interface: Upload invoices in `.pdf`, `.png`, `.jpeg`, or `.jpg` format.
+- Automatic Field Extraction: Extracts key invoice details such as:
+  - Document Type
+  - Currency
+  - Payment Method
+  - Invoice Number
+  - Invoice Date
+  - Due Date
+  - Total Amount
+  - Tax Amount
+- Responsive UI with simple styling for quick deployment.
+- Server-Side Rendering (SSR) for better SEO and initial load performance.
 
-## Installation and Setup
+## Tech Stack
 
-### Prerequisites
+### Frontend
+- Angular (Standalone components)
+- Angular Universal for SSR
+- HTML5, CSS3
 
-- Python 3.7+
-- pip package manager
+### Backend
+- Connects to a FastAPI or other API service for invoice data extraction.
 
-### Dependencies
+## Getting Started
 
+### 1. Install Dependencies
 ```bash
-pip install fastapi httpx beautifulsoup4 uvicorn pydantic
+npm install
 ```
 
-### Running the Service
-
+### 2. Development Server
+Run the application in browser mode:
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 800
+npm run dev
+```
+Or with SSR enabled:
+```bash
+npm run dev:ssr
 ```
 
-The API will be available at `http://0.0.0.0:8000`
+### 3. Build
+```bash
+# Build browser bundle
+npm run build
 
-## API Endpoints
-
-### Base URL
-```
-http://localhost:8000
-```
-
-### 1. Root Endpoint
-
-**GET** `/`
-
-Returns basic API information.
-
-**Response:**
-```json
-{
-  "message": "Moroccan Official Gazette Scraper API"
-}
+# Build with SSR
+npm run build:ssr
 ```
 
-### 2. Scrape Bulletins
-
-**POST** `/scrape`
-
-Scrapes bulletin data based on the provided parameters.
-
-**Request Body:**
-```json
-{
-  "start_date": "2024-01-01",
-  "end_date": "2024-01-31",
-  "language": "fr",
-  "bulletin_type": "all"
-}
+### 4. Run Production SSR Server
+```bash
+npm run serve:ssr
 ```
 
-**Parameters:**
-- `start_date` (required): Start date in YYYY-MM-DD format
-- `end_date` (required): End date in YYYY-MM-DD format
-- `language` (optional): Language preference - `"fr"` (French) or `"ar"` (Arabic). Default: `"fr"`
-- `bulletin_type` (optional): Type of bulletins - `"general"`, `"international"`, or `"all"`. Default: `"all"`
+## Configuration
 
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Found 25 bulletins",
-  "data": [
-    {
-      "BoNum": "7254",
-      "BoDate": "2024-01-15",
-      "BoUrl": "https://www.sgg.gov.ma/...",
-      "BoType": "general"
-    }
-  ],
-  "total_count": 25
-}
+The frontend is configured to connect to a backend extraction API.
+You can update API URLs or environment variables in your Angular service files or environment config.
+
+## Screenshots
+
+Invoice Upload Form
+```
+[User uploads an invoice via form]
 ```
 
-**Response Fields:**
-- `success`: Boolean indicating operation success
-- `message`: Descriptive message about the operation
-- `data`: Array of bulletin entries
-- `total_count`: Total number of bulletins found
-
-**Bulletin Entry Fields:**
-- `BoNum`: Bulletin number
-- `BoDate`: Publication date (YYYY-MM-DD format)
-- `BoUrl`: Direct URL to the bulletin
-- `BoType`: Type of bulletin ("general" or "international")
-
-### 3. Download CSV
-
-**POST** `/scrape/csv`
-
-Scrapes bulletin data and returns it as a downloadable CSV file.
-
-**Request Body:** Same as `/scrape` endpoint
-
-**Response:** CSV file download with filename format: `bulletins_{language}_{start_date}_{end_date}.csv`
-
-**CSV Structure:**
-```csv
-Type,Number,Date,URL
-general,7254,2024-01-15,https://www.sgg.gov.ma/...
-international,7255,2024-01-16,https://www.sgg.gov.ma/...
+Extracted Fields Display
+```
+Document Type: Invoice
+Currency: USD
+...
 ```
 
+## License
+This project is licensed under the MIT License — see the LICENSE file for details.
 
+## Contributing
+Pull requests are welcome. For major changes, please open an issue first to discuss your ideas.
 
-## Error Handling
-
-The API returns appropriate HTTP status codes and error messages:
-
-### Common Error Responses
-
-**400 Bad Request:**
-```json
-{
-  "detail": "Start date must be before end date"
-}
-```
-
-**500 Internal Server Error:**
-```json
-{
-  "success": false,
-  "message": "Error: Connection timeout",
-  "data": [],
-  "total_count": 0
-}
-```
-
-### Validation Errors
-
-- Invalid date format
-- Start date after end date
-- Unsupported language code
-- Invalid bulletin type
-
-## Usage Examples
-
-### Python Example
-
-```python
-import requests
-import json
-
-# Basic scraping request
-url = "http://localhost:8000/scrape"
-payload = {
-    "start_date": "2024-01-01",
-    "end_date": "2024-01-31",
-    "language": "fr",
-    "bulletin_type": "general"
-}
-
-response = requests.post(url, json=payload)
-data = response.json()
-
-print(f"Found {data['total_count']} bulletins")
-for bulletin in data['data']:
-    print(f"Bulletin {bulletin['BoNum']} - {bulletin['BoDate']}")
-```
-
+## Author
+Developed by Baka Mohamed
+Contact: bakamoohamed@gmail.com
