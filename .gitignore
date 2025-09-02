@@ -2,9 +2,9 @@
 __pycache__/
 *.pyc
 
-backend/out/*
-!backend/out/.gitkeep
-backend/test_data/
+.\backend\out\*
+!.\backend\out\.gitkeep
+.\backend\test_data\
 
 node_modules/
 dist/
