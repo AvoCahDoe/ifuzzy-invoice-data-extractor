@@ -10,7 +10,7 @@ No database is involved.
 ---
 
 ##  Project Layout (backend)
-
+```bash
 backend/
 ├── benchmark.py # Benchmark script
 ├── Dockerfile.bench  
@@ -18,7 +18,7 @@ backend/
 ├── docker-compose.bench.yml 
 ├── test_data/ # Place test PDFs/PNGs/JPGs here
 └── out/ # Results (CSV + JSON)
-
+```
 
 
 ---
@@ -30,7 +30,7 @@ backend/
 
 ### 2. Ensure Ollama is available
 
-**Option B — Run Ollama in Compose**
+**Run Ollama in Compose**
 
 - Start the Ollama service:
 
