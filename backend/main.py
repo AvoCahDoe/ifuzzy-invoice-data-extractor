@@ -3,9 +3,9 @@ os.environ["GRPC_VERBOSITY"] = "ERROR"
 os.environ["GLOG_minloglevel"] = "2"
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, status
 from fastapi.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket 
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
 from datetime import datetime
 import tempfile
 import json
@@ -18,35 +18,57 @@ from bson import ObjectId
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 from bson.json_util import dumps
+from typing import Optional, Dict, Any
 
-# Marker imports (your extraction service)
 from marker.config.parser import ConfigParser
 from marker.config.printer import CustomClickPrinter
 from marker.logger import configure_logging, get_logger
 from marker.models import create_model_dict
+from pypdf import PdfReader
 
-# Configure logging for marker
+from io import BytesIO as _BytesIO
+
 configure_logging()
 logger = get_logger()
 
 app = FastAPI()
 
-# CORS (allow frontend requests)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Works for development
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Connect to MongoDB
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 client = AsyncIOMotorClient(MONGODB_URI)
-db = client.fileuploads  # your DB name
+db = client.fileuploads  
 fs = AsyncIOMotorGridFSBucket(db)
 
-# Initialize marker models once (expensive operation)
+def _pdf_is_readable(pdf_bytes: bytes, min_chars: int = 50, sample_pages: int = 1) -> bool:
+    try:
+        reader = PdfReader(_BytesIO(pdf_bytes))
+        if len(reader.pages) == 0:
+            return False
+        pages_to_sample = min(len(reader.pages), sample_pages)
+        char_count = 0
+        for i in range(pages_to_sample):
+            txt = reader.pages[i].extract_text() or ""
+            char_count += len((txt or "").strip())
+        return char_count >= min_chars
+    except Exception:
+        return False
+
+def _pdf_extract_text(pdf_bytes: bytes) -> str:
+    reader = PdfReader(_BytesIO(pdf_bytes))
+    texts = []
+    for p in reader.pages:
+        texts.append(p.extract_text() or "")
+    return "\n\n".join(texts).strip()
+
+
+
 marker_models = None
 
 async def get_marker_models():
@@ -58,8 +80,7 @@ async def get_marker_models():
     return marker_models
 
 def image_to_base64(img):
-    """Convert PIL Image to base64 string"""
-    if hasattr(img, 'save'):  # PIL Image object
+    if hasattr(img, 'save'):  
         buffer = BytesIO()
         img.save(buffer, format='PNG')
         img_str = base64.b64encode(buffer.getvalue()).decode()
@@ -68,52 +89,60 @@ def image_to_base64(img):
             "data": img_str,
             "size": img.size if hasattr(img, 'size') else None
         }
-    elif isinstance(img, str):  # If it's already a path or string
+    elif isinstance(img, str):  
         return {"path": img}
     else:
         return {"error": "Unsupported image format"}
 
 def extract_markdown_content(rendered_obj):
-    """Extract just the markdown content from rendered object"""
     if hasattr(rendered_obj, 'text'):
         return rendered_obj.text
     elif hasattr(rendered_obj, 'markdown'):
         return rendered_obj.markdown
     else:
-        # Parse the string representation to extract markdown content
         rendered_str = str(rendered_obj)
         if rendered_str.startswith('markdown="') and '" images=' in rendered_str:
-            # Extract content between markdown=" and " images=
             start_idx = len('markdown="')
             end_idx = rendered_str.find('" images=')
             if end_idx != -1:
                 markdown_content = rendered_str[start_idx:end_idx]
-                # Unescape common escape sequences
                 markdown_content = markdown_content.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
                 return markdown_content
         return rendered_str
 
-async def extract_content_from_file(file_content: bytes, original_filename: str):
-    """Extract content from file using marker"""
-    
+async def extract_content_from_file(file_content: bytes, original_filename: str, force_ocr: bool = False):
     try:
-        # Get marker models
         models = await get_marker_models()
-        
-        # Create temporary file with original extension
+
         file_path = Path(original_filename)
-        suffix = file_path.suffix if file_path.suffix else '.pdf'
+        suffix = file_path.suffix.lower() if file_path.suffix else '.pdf'
+
+        start_time = time.time()
+
+        if not force_ocr and suffix == '.pdf' and _pdf_is_readable(file_content):
+            try:
+                content_text = _pdf_extract_text(file_content)
+                result_data = {
+                    "file_name": file_path.stem,
+                    "original_path": original_filename,
+                    "content": content_text,
+                    "images": [],              
+                    "images_count": 0,
+                    "extraction_timestamp": time.time(),
+                    "processing_time": time.time() - start_time,
+                    "extraction_mode": "pdf_text_layer"
+                }
+                return result_data
+            except Exception as e:
+                logger.warning(f"Readable-PDF path failed, falling back to OCR: {e}")
+
         
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or '.pdf') as temp_file:
             temp_file.write(file_content)
             temp_file_path = temp_file.name
-        
-        start_time = time.time()
-        
+
         try:
-            # Simple approach - try direct conversion first
             try:
-                # Initialize marker components with default config
                 config_dict = {
                     'output_format': 'markdown',
                     'extract_images': True,
@@ -132,42 +161,27 @@ async def extract_content_from_file(file_content: bytes, original_filename: str)
                     renderer=config_parser.get_renderer(),
                     llm_service=config_parser.get_llm_service(),
                 )
+                rendered = converter(temp_file_path)
             except Exception as config_error:
-                logger.warning(f"Config setup failed, trying simpler approach: {config_error}")
-                # Fallback to minimal setup
+                logger.warning(f"Marker config/init failed, trying simple convert: {config_error}")
                 from marker.convert import convert_single_pdf
-                # This is a simplified conversion - adjust based on your marker version
                 result = convert_single_pdf(temp_file_path, models)
-                
-                # Handle simple result format
                 if isinstance(result, tuple) and len(result) >= 2:
                     content = result[0] if isinstance(result[0], str) else str(result[0])
                     images = result[1] if len(result) > 1 else {}
                 else:
                     content = str(result)
                     images = {}
-                
-                # Create a simple rendered object
+
                 class SimpleRendered:
                     def __init__(self, content, images):
                         self.text = content
                         self.markdown = content
                         self.images = images
-                
                 rendered = SimpleRendered(content, images)
-            
-            # Convert the file - try the configured converter first, then fallback
-            try:
-                rendered = converter(temp_file_path)
-            except Exception as conv_error:
-                logger.warning(f"Converter failed, using fallback result: {conv_error}")
-                # rendered should be set from the fallback above
-                pass
-            
-            # Extract clean content
+
             content = extract_markdown_content(rendered)
-            
-            # Process images if they exist
+
             serialized_images = []
             if hasattr(rendered, 'images') and rendered.images:
                 if isinstance(rendered.images, dict):
@@ -192,12 +206,8 @@ async def extract_content_from_file(file_content: bytes, original_filename: str)
                             serialized_images.append(serialized_img)
                         except Exception as e:
                             logger.warning(f"Could not serialize image {i}: {e}")
-                            serialized_images.append({
-                                "index": i,
-                                "error": str(e)
-                            })
-            
-            # Create result structure
+                            serialized_images.append({"index": i, "error": str(e)})
+
             result_data = {
                 "file_name": file_path.stem,
                 "original_path": original_filename,
@@ -205,18 +215,17 @@ async def extract_content_from_file(file_content: bytes, original_filename: str)
                 "images": serialized_images,
                 "images_count": len(serialized_images),
                 "extraction_timestamp": time.time(),
-                "processing_time": time.time() - start_time
+                "processing_time": time.time() - start_time,
+                "extraction_mode": "marker_ocr"
             }
-            
             return result_data
-            
+
         finally:
-            # Clean up temporary file
             try:
                 os.unlink(temp_file_path)
-            except:
+            except Exception:
                 pass
-                
+
     except Exception as e:
         logger.error(f"Error during extraction: {e}")
         raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
@@ -231,7 +240,7 @@ async def upload_file(file: UploadFile = File(...)):
             "upload_date": datetime.utcnow(),
             "content_type": file.content_type,
             "original_filename": file.filename,
-            "processed": False  # Track processing status
+            "processed": False  
         }
         file_id = await fs.upload_from_stream(file.filename, file.file, metadata=metadata)
         print(f"Upload successful, ID: {file_id}")
@@ -247,7 +256,6 @@ async def list_files():
         files = await cursor.to_list(length=100)
         if not files:
             return {"files": []}
-        # Format files for JSON response
         result = []
         for file in files:
             result.append({
@@ -263,63 +271,65 @@ async def list_files():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/process/{file_id}")
-async def process_file(file_id: str):
+async def process_file(file_id: str, force_ocr: bool = False):
     try:
-        # Validate ObjectId
         try:
             obj_id = ObjectId(file_id)
-        except:
+        except Exception:
             raise HTTPException(status_code=400, detail="Invalid file ID")
-        
-        # Check if file exists
+
         file_doc = await db.fs.files.find_one({"_id": obj_id})
         if not file_doc:
             raise HTTPException(status_code=404, detail="File not found")
-        
-        # Check if already processed
-        if file_doc.get("metadata", {}).get("processed", False):
-            # Return existing extraction if available
+
+        if file_doc.get("metadata", {}).get("processed", False) and not force_ocr:
             existing_extraction = await db.extractions.find_one({"file_id": obj_id})
             if existing_extraction:
-                # Convert ObjectId to string for JSON serialization
                 existing_extraction["_id"] = str(existing_extraction["_id"])
                 existing_extraction["file_id"] = str(existing_extraction["file_id"])
                 return {"message": "File already processed", "extraction": existing_extraction}
-        
-        # Download file content
+
         grid_out = await fs.open_download_stream(obj_id)
         file_content = await grid_out.read()
-        
+
         original_filename = file_doc.get("filename", "unknown")
-        
-        # Extract content
-        logger.info(f"Starting extraction for file: {original_filename}")
-        extraction_result = await extract_content_from_file(file_content, original_filename)
-        
-        # Store extraction result in database
+
+        logger.info(f"Starting extraction for file: {original_filename} (force_ocr={force_ocr})")
+        extraction_result = await extract_content_from_file(file_content, original_filename, force_ocr=force_ocr)
+
         extraction_doc = {
             "file_id": obj_id,
             "original_filename": original_filename,
             "extraction_data": extraction_result,
             "created_at": datetime.utcnow()
         }
-        
-        insertion_result = await db.extractions.insert_one(extraction_doc)
-        
-        # Update file metadata to mark as processed
+
+        existing = await db.extractions.find_one({"file_id": obj_id})
+        if existing and force_ocr:
+            await db.extractions.update_one(
+                {"_id": existing["_id"]},
+                {"$set": extraction_doc}
+            )
+            insertion_id = existing["_id"]
+        elif existing:
+            insertion_id = existing["_id"]
+        else:
+            insert_res = await db.extractions.insert_one(extraction_doc)
+            insertion_id = insert_res.inserted_id
+
         await db.fs.files.update_one(
             {"_id": obj_id},
             {"$set": {"metadata.processed": True, "metadata.processed_at": datetime.utcnow()}}
         )
-        
+
         logger.info(f"Extraction completed and stored for file: {original_filename}")
-        
+
         return {
             "message": "File processed successfully",
-            "extraction_id": str(insertion_result.inserted_id),
+            "extraction_id": str(insertion_id),
             "extraction": extraction_result
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -328,26 +338,22 @@ async def process_file(file_id: str):
 
 @app.get("/extraction/{file_id}")
 async def get_extraction(file_id: str):
-    """Get extraction result for a specific file"""
     try:
         obj_id = ObjectId(file_id)
         extraction = await db.extractions.find_one({"file_id": obj_id})
-        
+
         if not extraction:
             raise HTTPException(status_code=404, detail="Extraction not found")
-        
-        # Convert ObjectId to string for JSON serialization
+
         extraction["_id"] = str(extraction["_id"])
         extraction["file_id"] = str(extraction["file_id"])
-        
+
         return {"extraction": extraction}
-        
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-from fastapi import status
 
 @app.delete("/files/{file_id}", status_code=204)
 async def delete_file(file_id: str):
@@ -358,12 +364,12 @@ async def delete_file(file_id: str):
         if not file_doc:
             raise HTTPException(status_code=404, detail="File not found")
 
-        await fs.delete(oid)  # This line may raise if the file has no chunks
+        await fs.delete(oid)  
 
         await db.processed_data.delete_many({"original_file_id": file_id})
         return
     except Exception as e:
-        print("DELETE ERROR:", str(e))  # <== TEMPORARY LOG
+        print("DELETE ERROR:", str(e))  
         raise HTTPException(status_code=500, detail=str(e))
 
 import ollama
@@ -371,21 +377,17 @@ import ollama
 @app.post("/structure/{file_id}")
 async def structure_extraction(file_id: str):
     try:
-        # Validate ObjectId
         try:
             obj_id = ObjectId(file_id)
-        except:
+        except Exception:
             raise HTTPException(status_code=400, detail="Invalid file ID")
 
-        # Find extracted Markdown from previous step
         extraction_doc = await db.extractions.find_one({"file_id": obj_id})
         if not extraction_doc or "extraction_data" not in extraction_doc:
             raise HTTPException(status_code=404, detail="No extracted data found for this file")
 
         markdown_text = extraction_doc["extraction_data"]["content"]
 
-
-        # Format prompt
         prompt = f"""
 Vous êtes un assistant intelligent chargé d’extraire les informations essentielles d’une facture ou d’un bon de livraison en format Markdown.
 
@@ -418,8 +420,6 @@ Voici le texte à analyser :
 Rends uniquement un objet JSON valide avec les noms de champs exacts ci-dessus, sans texte explicatif, sans commentaire.
 """
 
-
-        # print(markdown_text)
         response = ollama.chat(model="mistral", messages=[
             {"role": "user", "content": prompt}
         ])
@@ -437,7 +437,7 @@ Rends uniquement un objet JSON valide avec les noms de champs exacts ci-dessus, 
         })
 
         return {
-            "message": "✅ Structured data extracted and saved.",
+            "message": "Structured data extracted and saved.",
             "data": structured_data
         }
 
@@ -446,8 +446,6 @@ Rends uniquement un objet JSON valide avec les noms de champs exacts ci-dessus, 
     except Exception as e:
         logger.error(f"Error structuring file {file_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Structuring failed: {str(e)}")
-    
-from fastapi import Body
 
 @app.put("/update/{file_id}")
 async def update_structured_data(file_id: str, updated_data: dict = Body(...)):
@@ -460,6 +458,24 @@ async def update_structured_data(file_id: str, updated_data: dict = Body(...)):
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Données structurées non trouvées")
 
-        return {"message": "✅ Données mises à jour avec succès"}
+        return {"message": "Données mises à jour avec succès"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur de mise à jour : {str(e)}")
+
+from fastapi.responses import JSONResponse
+
+@app.get("/health")
+async def health():
+    ok = {"mongo": False, "ollama": False}
+    try:
+        await db.command("ping")
+        ok["mongo"] = True
+    except Exception:
+        pass
+    try:
+        import ollama
+        _ = ollama.list()  # will fail if daemon unreachable
+        ok["ollama"] = True
+    except Exception:
+        pass
+    return JSONResponse(ok, status_code=200 if all(ok.values()) else 503)
