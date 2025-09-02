@@ -1,10 +1,8 @@
-#!/usr/bin/env python3
 import os, sys, time, json, csv, argparse
 from pathlib import Path
 from statistics import mean, median
 from typing import List, Dict, Any, Tuple
 
-# ---- Fast PDF text layer path (no OCR)
 from io import BytesIO as _BytesIO
 from pypdf import PdfReader
 
@@ -29,7 +27,6 @@ def _pdf_extract_text(pdf_bytes: bytes) -> str:
         texts.append(p.extract_text() or "")
     return "\n\n".join(texts).strip()
 
-# ---- Marker OCR path
 from marker.config.parser import ConfigParser
 from marker.models import create_model_dict
 
@@ -82,7 +79,6 @@ def extract_content(file_path: Path, models: Dict[str, Any], force_ocr: bool=Fal
         tf.flush()
         return extract_with_marker(tf.name, models)
 
-# ---- LLM structuring (Ollama) — uses your prompt
 PROMPT_TMPL = """
 Vous êtes un assistant intelligent chargé d’extraire les informations essentielles d’une facture ou d’un bon de livraison en format Markdown.
 
@@ -130,7 +126,6 @@ def run_ollama_structuring(markdown_text: str, model_name: str, attempts: int = 
             time.sleep(base_sleep * (i + 1))
     raise RuntimeError(f"Ollama failed after {attempts} attempts: {last_err}")
 
-# ---- stats helpers
 def p95(lst: List[float]) -> float:
     if not lst:
         return 0.0
@@ -160,11 +155,9 @@ def main():
         files.extend(sorted(in_dir.rglob(pat)))
     files = [f for f in files if f.is_file()]
 
-    # Ensure output dirs exist
     Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.csv_out).parent.mkdir(parents=True, exist_ok=True)
 
-    # Prepare CSV: append mode, write header only if file is empty
     csv_path = Path(args.csv_out)
     write_header = (not csv_path.exists()) or (csv_path.stat().st_size == 0)
     csv_file = open(args.csv_out, "a", newline="", encoding="utf-8")
@@ -175,7 +168,6 @@ def main():
 
     if not files:
         print(f"[WARN] No files matched in {in_dir} for patterns {patterns}")
-        # Also create an empty JSON skeleton
         with open(args.json_out, "w", encoding="utf-8") as jf:
             json.dump({"total_files": 0, "runs": []}, jf, ensure_ascii=False, indent=2)
         csv_file.close()
@@ -196,11 +188,10 @@ def main():
 
     for i, f in enumerate(files, 1):
         ok_e = True
-        ok_l = (not args.with_llm)  # if not running LLM, treat as OK by default
+        ok_l = (not args.with_llm)   
         mode = ""
         err = ""
 
-        # extraction
         t0 = time.perf_counter()
         try:
             content, mode = extract_content(f, models, force_ocr=args.force_ocr)
@@ -213,7 +204,6 @@ def main():
         if ok_e:
             extract_times_ok.append(extraction_ms)
 
-        # structuring (optional)
         struct_ms = 0.0
         if args.with_llm and ok_e:
             t2 = time.perf_counter()
@@ -228,7 +218,6 @@ def main():
             if ok_l:
                 struct_times_ok.append(struct_ms)
 
-        # record in memory
         rec = {
             "filename": str(f.relative_to(in_dir)),
             "ok_extract": ok_e,
@@ -240,7 +229,6 @@ def main():
         }
         results.append(rec)
 
-        # stream to CSV immediately
         csv_writer.writerow([
             rec["filename"],
             rec["ok_extract"],
@@ -252,7 +240,6 @@ def main():
         ])
         csv_file.flush()
 
-        # console log
         print(f"[{i}/{len(files)}] {f.name} -> {rec['mode'] or 'ERR'} | extract {extraction_ms:.1f} ms"
               + (f" | LLM {struct_ms:.1f} ms" if args.with_llm else "")
               + (f"  !! {err}" if err else ""))
