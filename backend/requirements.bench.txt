@@ -1,0 +1,4 @@
+marker-pdf
+pypdf
+Pillow
+ollama

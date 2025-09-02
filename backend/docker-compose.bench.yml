@@ -1,0 +1,40 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  bench_nodb:
+    build:
+      context: .
+      dockerfile: Dockerfile.bench
+    image: invoice-extraction-bench:latest
+    container_name: bench_nodb
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - ./benchmark.py:/app/benchmark.py:ro
+      - ./test_data:/data:ro
+      - ./out:/out
+    command:
+      - python
+      - benchmark.py
+      - --input
+      - /data
+      - --pattern
+      - "*.pdf,*.png,*.jpg,*.jpeg"
+      - --json-out
+      - /out/results.json
+      - --csv-out
+      - /out/results.csv
+      - --with-llm
+      - --ollama-model
+      - mistral
+
+volumes:
+  ollama_data:
