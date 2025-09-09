@@ -1,121 +1,69 @@
-# Invoice Data Extraction (Angular + SSR + FastAPI)
+# Invoice Data Extractor  
 
-This repository contains a full-stack invoice data extraction tool:
-- Frontend: Angular Standalone with Server-Side Rendering (SSR)
-- Backend: FastAPI service for invoice data extraction
+This project is a full-stack web application for extracting structured data from invoices (PDF, PNG, JPEG) using **FastAPI**, **Angular (SSR)**, **MongoDB GridFS**, and **Ollama (LLM)**.  
 
-Users can upload invoices in PDF or image format (PNG/JPEG). The frontend sends the file to the backend for parsing and extraction, then renders the extracted fields.
+---
 
 ## Features
+- Upload invoices (PDF/PNG/JPEG).  
+- OCR + text extraction using [Marker].  
+- LLM structuring via **Ollama** (e.g. Mistral model).  
+- Store extractions in MongoDB (GridFS).  
+- Validate and update structured JSON through the web UI.  
+- Task manager for background processing.  
 
-- Upload invoices in `.pdf`, `.png`, `.jpeg`, or `.jpg`
-- Extraction of key fields: document type, currency, payment method, invoice number, invoice date, due date, total amount, tax amount
-- Server-Side Rendering for faster first paint and SEO
-- Simple, responsive UI
+---
 
-## Demo Video
+## Requirements
+- [Docker](https://docs.docker.com/get-docker/) + [Docker Compose](https://docs.docker.com/compose/)  
+- At least **8GB RAM** recommended  
+- No GPU required (runs in CPU mode by default)  
 
-![Demo Preview](demo/demo.gif)
+---
 
-[Watch full demo video](demo/demo.mp4)
+## Setup & Run  
 
-
-## Prerequisites
-
-- Node.js 18+ and npm
-- Python 3.9+
-
-## Getting Started
-
-### 1) Clone
+### 1. Clone the repo
 ```bash
 git clone https://github.com/medbakaaa/invoice-data-extractor.git
 cd invoice-data-extractor
 ```
 
----
+### 2. Build & start services
+bash
+Copier le code
+docker compose up -d --build
+This will start:
 
-## Frontend (Angular + SSR)
+backend → FastAPI app on http://localhost:8000
 
-### Install dependencies
+frontend → Angular SSR app on http://localhost:4000
+
+mongo → MongoDB with GridFS
+
+ollama → Ollama LLM server on http://localhost:11434
+
+### 3. Pull the LLM model in Ollama
+Inside the Ollama container, run:
+
 ```bash
-cd frontend
-npm install
+docker compose exec ollama ollama pull mistral
 ```
 
-### Development server
-Browser mode:
+### 4. Access the app
+Open http://localhost:4000 → Upload page
+
+Backend API docs: http://localhost:8000/docs
+
+## Development
+Rebuild only the backend
+
 ```bash
-npm run dev
+docker compose up -d --no-deps --build backend
 ```
-SSR mode:
+
+Rebuild only the frontend
+
 ```bash
-npm run dev:ssr
+docker compose up -d --no-deps --build frontend
 ```
-
-### Build
-```bash
-npm run build
-# or
-npm run build:ssr
-```
-
-### Run production SSR server
-```bash
-npm run serve:ssr
-```
-
----
-
-## Backend (FastAPI)
-
-### Create and activate a virtual environment
-```bash
-cd backend
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# macOS/Linux
-source venv/bin/activate
-```
-
-### Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### Run the server
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-The backend will listen on:
-```
-http://localhost:8000
-```
-
-### Expected API endpoints (example)
-Your implementation may differ; adjust to your code.
-- `POST /extract` – multipart form-data with file field, returns JSON with extracted fields
-- `GET /health` – returns a simple health check JSON
-
----
-
-## Project Notes
-
-- Ensure CORS is enabled in the backend for local development if the frontend runs on a different origin.
-- For production, configure a reverse proxy (e.g., Nginx) to route `/api` to FastAPI and serve Angular SSR on `/`.
-
----
-
-
-
-## Contributing
-
-Issues and pull requests are welcome. For major changes, open an issue to discuss your proposal first.
-
-## Author
-
-Developed by Baka Mohamed
-
-Contact: bakamoohamed@gmail.com
