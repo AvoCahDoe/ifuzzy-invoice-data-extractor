@@ -1,55 +1,59 @@
-
 services:
-  backend:
-    build:
-      context: ./backend
-    ports:
-      - "8000:8000"
-    depends_on:
-      - mongo
-      - ollama
-    environment:
-      - MONGODB_URI=mongodb://mongo:27017
-      - OLLAMA_HOST=http://ollama:11434
-    networks:
-      - app_net
-
   frontend:
     build:
       context: ./frontend
-    ports:
-      - "4200:4000"
-    depends_on:
-      - backend
-    networks:
-      - app_net
+      dockerfile: Dockerfile
+    environment:
+      - API_BASE_URL=http://backend:8000
+      - PORT=4000
+      - NODE_ENV=production
+    depends_on: [backend]
+    ports: ["4000:4000"]
+    networks: [appnet]
 
-  mongo:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - MONGODB_URI=mongodb://mongodb:27017
+      - OLLAMA_HOST=http://ollama:11434
+      - CORS_ALLOW_ORIGINS=http://localhost:4000
+      - TORCH_DEVICE=cpu
+    depends_on: [mongodb, ollama]
+    ports: ["8000:8000"]
+    networks: [appnet]
+
+  mongodb:
     image: mongo:6
-    restart: always
-    ports:
-      - "27017:27017"
+    restart: unless-stopped
+    environment:
+      - MONGO_INITDB_DATABASE=fileuploads
     volumes:
       - mongo_data:/data/db
-    networks:
-      - app_net
-    
-  ollama:
-      build:
-        context: .
-        dockerfile: ollama.Dockerfile
-      ports:
-        - "11434:11434"
-      volumes:
-        - ollama_data:/root/.ollama
-      networks:
-        - app_net
-      restart: always
+    ports: ["27017:27017"]
+    networks: [appnet]
 
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports: ["11434:11434"]   
+    volumes:
+      - ollama_models:/root/.ollama
+    networks: [appnet]
+    entrypoint: ["/bin/sh","-lc"]
+    command: >
+      "ollama serve &
+       until curl -sf http://localhost:11434/api/tags > /dev/null; do sleep 1; done &&
+       ollama pull mistral &&
+       wait"
+
+networks:
+  appnet:
 
 volumes:
   mongo_data:
-  ollama_data:
-
-networks:
-  app_net:
+  ollama_models:
