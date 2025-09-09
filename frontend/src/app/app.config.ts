@@ -1,15 +1,12 @@
-import { ApplicationConfig, NgModule } from '@angular/core';
-import { provideServerRendering } from '@angular/platform-server';
-import { provideHttpClient } from '@angular/common/http';
-import { PdfViewerModule } from 'ng2-pdf-viewer';
+import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
+import { provideRouter } from '@angular/router';
 
-// @NgModule({
-//   imports: [PdfViewerModule]
-// })
+import { routes } from './app.routes';
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideServerRendering(),
-    provideHttpClient()
+    provideBrowserGlobalErrorListeners(),
+    provideZonelessChangeDetection(),
+    provideRouter(routes)
   ]
 };

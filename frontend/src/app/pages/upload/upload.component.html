@@ -1,0 +1,43 @@
+<div class="upload-wrap">
+  <div class="upload-card">
+    <h2>Attachments</h2>
+
+    <label for="file-upload" class="drop-area"
+           (dragover)="onDragOver($event)" (drop)="onDrop($event)">
+      <input id="file-upload" type="file" accept=".pdf,.png,.jpeg,.jpg"
+             hidden (change)="onFileChange($event)" />
+
+      <div class="upload-instruction">
+        <p>Drop your invoice<br>(PDF, PNG or JPEG)</p>
+        <button type="button" (click)="triggerFileInput()" [disabled]="uploading">
+            Select a file
+        </button>
+      </div>
+    </label>
+
+    <div class="upload-controls">
+      <p *ngIf="selectedFile">{{ selectedFile.name }}</p>
+
+      <div class="loading-container" *ngIf="uploading">
+        <div class="spinner"></div>
+        <p class="loading-text">Processing…</p>
+      </div>
+
+      <!-- <a routerLink="/status" class="status-link">Voir la page de statut</a> -->
+    </div>
+  </div>
+
+  <div class="modal-backdrop" *ngIf="showModal">
+    <div class="modal">
+      <h3>Processing started</h3>
+      <p>
+        Your document is being processed.<br>
+        This may take a moment. You can track the status on the Status page.
+      </p>
+      <div class="modal-actions">
+        <button (click)="goToStatus()">Go to Status page</button>
+        <button class="secondary" (click)="closeModal()">Stay here</button>
+      </div>
+    </div>
+  </div>
+</div>

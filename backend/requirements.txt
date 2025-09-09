@@ -1,8 +1,9 @@
 fastapi
-uvicorn
+uvicorn[standard]
 motor
-pymongo
-pillow
-python-multipart
+pydantic
+pypdf
+Pillow
 ollama
-marker-pdf[full]
+marker-pdf
+python-multipart

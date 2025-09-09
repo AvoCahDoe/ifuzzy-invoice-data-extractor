@@ -1,0 +1,106 @@
+.upload-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+.upload-card {
+  width: 100%;
+  max-width: 980px;
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  padding: 1.5rem 2rem;
+}
+.upload-card h2 {
+  margin: 0 0 1rem 0;
+}
+
+.drop-area {
+  border: 2px dashed #aaa;
+  padding: 2rem;
+  cursor: pointer;
+  border-radius: 8px;
+  margin: 0.5rem 0 1rem;
+  width: 92%;
+  display: block;
+  text-align: center;
+}
+.drop-area:hover {
+  border-color: #888;
+}
+
+.upload-instruction p {
+  margin: 0.5rem 0;
+}
+
+button {
+  background-color: #007bff;
+  color: white;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  cursor: pointer;
+}
+button:hover { background-color: #0056b3; }
+button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  color: #666;
+  box-shadow: none;
+}
+button.secondary {
+  background: #f0f0f0;
+  color: #333;
+}
+button.secondary:hover { background: #e4e4e4; }
+
+.loading-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid #ccc;
+  border-top: 2px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-weight: 600; color: #555; }
+
+.upload-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.status-link {
+  color: #007bff;
+  text-decoration: none;
+}
+.status-link:hover { text-decoration: underline; }
+
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  width: 100%;
+  max-width: 520px;
+  border: 1px solid #ddd;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+}
+.modal h3 { margin-top: 0; }
+.modal-actions {
+  display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem;
+}

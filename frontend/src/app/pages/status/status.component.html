@@ -1,0 +1,99 @@
+<div class="page">
+  <div class="card">
+    <div class="card-header">
+      <h2>Task Status</h2>
+      <div class="toolbar">
+        <input
+          class="input"
+          type="text"
+          placeholder="Rechercher par nom..."
+          [(ngModel)]="query"
+          (input)="applyFilters()"
+        />
+
+        <select class="select" [(ngModel)]="filterStatus" (change)="applyFilters()">
+            <option value="">All</option>
+          <option value="queued">queued</option>
+          <option value="extracting">extracting</option>
+          <option value="structuring">structuring</option>
+          <option value="validated">validated</option>
+          <option value="done">done</option>
+          <option value="error">error</option>
+        </select>
+
+        <button class="btn" (click)="refresh()">Refresh</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Created</th>
+            <th>Updated</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr *ngFor="let r of filtered">
+            <td class="name" [title]="r.filename || r.baseName || r.file_id">
+              {{ r.baseName || r.filename || r.file_id }}
+            </td>
+            <td>{{ r.created_at }}</td>
+            <td>{{ r.updated_at }}</td>
+            <td>
+              <span [ngClass]="badgeClass(r.status)">
+                <span class="badge-dot" *ngIf="r.status==='extracting' || r.status==='structuring'"></span>
+                {{ r.status }}
+              </span>
+            </td>
+            <td class="action">
+              <div class="actions">
+                <button
+                  class="icon-btn primary"
+                  [disabled]="!r.canValidate"
+                  (click)="onValidate(r)"
+                  [title]="r.canValidate ? 'Valider' : 'Disponible quand le traitement est terminé'"
+                  aria-label="Valider"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M9 12l2 2 4-4"></path>
+                  </svg>
+                </button>
+
+                <button
+                  class="icon-btn danger"
+                  [disabled]="isBusy(r) || isDeleting(r)"
+                  (click)="onDelete(r)"
+                  [title]="isDeleting(r) ? 'Suppression…' : 'Supprimer'"
+                  aria-label="Supprimer"
+                >
+                  <svg *ngIf="!isDeleting(r)" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                    <path d="M10 11v6"></path>
+                    <path d="M14 11v6"></path>
+                    <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  <span class="spinner sm" *ngIf="isDeleting(r)"></span>
+                </button>
+              </div>
+            </td>
+
+
+          </tr>
+
+          <tr *ngIf="!filtered?.length">
+            <td colspan="5" class="empty">No tasks found.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
