@@ -67,4 +67,8 @@ export class ApiService {
     return this.http.post(`${this.base}/task/validate/${taskId}`, {});
   }
 
+  getFileBlob(fileId: string) {
+    const url = this.fileRawUrl(fileId);
+    return this.http.get(url, { responseType: 'blob' });
+  }
 }

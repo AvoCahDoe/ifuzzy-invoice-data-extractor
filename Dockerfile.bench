@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+
+WORKDIR /bench
+
+RUN pip install --no-cache-dir httpx==0.27.0 pandas==2.2.2 python-dotenv==1.0.1
+
+COPY scripts/benchmark_nodb.py /bench/benchmark_nodb.py
+RUN mkdir -p /bench/out
+
+CMD ["python", "/bench/benchmark.py"]

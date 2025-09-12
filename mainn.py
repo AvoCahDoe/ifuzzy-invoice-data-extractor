@@ -53,34 +53,15 @@ app = FastAPI(
     openapi_tags=OPENAPI_TAGS,
 )
 
-origins = [
-    "http://localhost:4000",
-    "http://127.0.0.1:4000",
 
-]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,        
-    allow_credentials=True,       
+    allow_origins=["*"],  
+    allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],         
-    expose_headers=[
-        "Content-Length",
-        "Content-Range",
-        "Accept-Ranges",
-        "Content-Disposition",
-    ],
-    max_age=86400,
+    allow_headers=["*"],
 )
-
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],  
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
 
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 client = AsyncIOMotorClient(MONGODB_URI)
@@ -321,7 +302,7 @@ async def extract_content_from_file(file_content: bytes, original_filename: str,
             try:
                 config_dict = {
                     'output_format': 'markdown',
-                    'extract_images': False,
+                    'extract_images': True,
                     'batch_multiplier': 1,
                     'max_pages': None,
                     'langs': None,
@@ -462,113 +443,26 @@ async def list_files():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# @app.get(
-#     "/files/raw/{file_id}",
-#     tags=["Files"],
-#     summary="Stream original file bytes"
-# )
-# async def file_raw(file_id: str):
-#     oid = to_oid(file_id)
-#     file_doc = await db.fs.files.find_one({"_id": oid})
-#     if not file_doc:
-#         raise HTTPException(status_code=404, detail="File not found")
-#     grid_out = await fs.open_download_stream(oid)
-#     content_type = file_doc.get("metadata", {}).get("content_type") or "application/octet-stream"
-
-#     async def _iter():
-#         while True:
-#             chunk = await grid_out.readchunk()
-#             if not chunk:
-#                 break
-#             yield chunk
-#     return StreamingResponse(_iter(), media_type=content_type)
-import mimetypes, re
-from fastapi import HTTPException, Request
-from fastapi.responses import StreamingResponse
-
 @app.get(
     "/files/raw/{file_id}",
     tags=["Files"],
     summary="Stream original file bytes"
 )
-async def file_raw(file_id: str, request: Request):
+async def file_raw(file_id: str):
     oid = to_oid(file_id)
     file_doc = await db.fs.files.find_one({"_id": oid})
     if not file_doc:
         raise HTTPException(status_code=404, detail="File not found")
-
-    filename = file_doc.get("filename") or f"{file_id}"
-    total_len = int(file_doc.get("length") or 0)
-
-    meta_ct = (file_doc.get("metadata") or {}).get("content_type") \
-              or (file_doc.get("metadata") or {}).get("contentType")
-    guess_ct = mimetypes.guess_type(filename)[0]
-    content_type = meta_ct or guess_ct or "application/octet-stream"
-
-    if filename.lower().endswith(".pdf"):
-        content_type = "application/pdf"
-
-    disp = f'inline; filename="{filename}"'
-
     grid_out = await fs.open_download_stream(oid)
+    content_type = file_doc.get("metadata", {}).get("content_type") or "application/octet-stream"
 
-    range_header = request.headers.get("range") or request.headers.get("Range")
-    start = 0
-    end = (total_len - 1) if total_len else None
-    status_code = 200
-    headers = {
-        "Content-Disposition": disp,
-        "Accept-Ranges": "bytes",
-    }
-
-    if range_header and total_len:
-        m = re.match(r"bytes=(\d*)-(\d*)", range_header)
-        if m:
-            g1, g2 = m.groups()
-            if g1 == "" and g2 == "":
-                
-                pass
-            else:
-                if g1 != "":
-                    start = int(g1)
-                if g2 != "":
-                    end = int(g2)
-                else:
-                    end = total_len - 1
-                if start < 0: start = 0
-                if end >= total_len: end = total_len - 1
-                if start > end:
-                    raise HTTPException(status_code=416, detail="Requested Range Not Satisfiable")
-
-                status_code = 206  
-                headers["Content-Range"] = f"bytes {start}-{end}/{total_len}"
-                headers["Content-Length"] = str(end - start + 1)
-
-                await grid_out.seek(start)
-
-    if status_code == 200 and total_len:
-        headers["Content-Length"] = str(total_len)
-
-    async def _iter_range():
-        remaining = None if end is None else (end - start + 1)
-        chunk_size = int(file_doc.get("chunkSize") or 255 * 1024)  
+    async def _iter():
         while True:
-            to_read = chunk_size if remaining is None else min(chunk_size, remaining)
-            if to_read is not None and to_read <= 0:
-                break
-            chunk = await grid_out.read(to_read)  
+            chunk = await grid_out.readchunk()
             if not chunk:
                 break
-            if remaining is not None:
-                remaining -= len(chunk)
             yield chunk
-
-    return StreamingResponse(
-        _iter_range(),
-        status_code=status_code,
-        media_type=content_type,
-        headers=headers,
-    )
+    return StreamingResponse(_iter(), media_type=content_type)
 
 
 @app.post(

@@ -1,0 +1,9 @@
+file,relpath,size_bytes,upload_s,process_s,structure_s,total_s,status,error
+1-facture-en-ligne.png,1-facture-en-ligne.png,86981,0.01759505271911621,,,,error,Server disconnected without sending a response.
+10986_tutorial_invoice_custom_column.png,10986_tutorial_invoice_custom_column.png,236828,,,,,error,[Errno 111] Connection refused
+1131w-0f8njI3IU3c.png,1131w-0f8njI3IU3c.png,73572,,,,,error,[Errno 111] Connection refused
+1131w-_bNIDByiaAU.png,1131w-_bNIDByiaAU.png,71410,,,,,error,[Errno 111] Connection refused
+1131w-_feleypF2o4.png,1131w-_feleypF2o4.png,62752,,,,,error,[Errno 111] Connection refused
+4042058792ff001aa2.png,4042058792ff001aa2.png,406859,,,,,error,[Errno 111] Connection refused
+cc.png,cc.png,60574,,,,,error,[Errno 111] Connection refused
+exemple-facture-infast-article-1440x2036.png,exemple-facture-infast-article-1440x2036.png,509305,,,,,error,[Errno 111] Connection refused

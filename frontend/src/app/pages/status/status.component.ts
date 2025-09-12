@@ -96,7 +96,12 @@ export class StatusPage implements OnInit, OnDestroy {
 
   onValidate(row: TaskRow) {
     const taskId = row.task_id ?? `file-${row.file_id}`;
-    this.router.navigate(['/validate', taskId, row.file_id]);
+    this.router.navigate(['/validate', taskId, row.file_id],
+    {
+      // either way works; I show both. Pick one and keep it consistent.
+      queryParams: { drawer: 'off' },            // OPTION A: query param
+      state: { drawerOpen: false }               // OPTION B: navigation state
+    });
   }
 
   showDeleteFor(row: TaskRow) {

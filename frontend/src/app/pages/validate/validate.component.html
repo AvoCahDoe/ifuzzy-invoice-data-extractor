@@ -1,10 +1,11 @@
 <div class="validate-toolbar">
   <h2>Field Validation</h2>
-  <button class="btn outline" (click)="drawerOpen = !drawerOpen">
+  <button class="btn outline" (click)="toggleDrawer()" aria-label="Toggle preview drawer">
+
     <span *ngIf="!drawerOpen">
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M13 16L7 10L13 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
+        <path d="M13 16L7 10L13 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg> 
     </span>
     <span *ngIf="drawerOpen">✖</span>
   </button>
@@ -12,47 +13,47 @@
 
 <div class="two-col" [class.drawer-open]="drawerOpen">
   <section class="extracted-fields">
-    <div class="loading-container" *ngIf="loading">
+    <div class="loading-container" *ngIf="dataLoading">
       <div class="spinner"></div>
-      <p class="loading-text">Extraction in progress…</p>
+      <p class="loading-text">Loading data…</p>
     </div>
 
-    <div class="fields-grid">
+    <div class="fields-grid" *ngIf="!dataLoading">
       <div class="field">
         <label>Document Type</label>
-        <input type="text" [(ngModel)]="extracted.document_type" [disabled]="loading" />
+        <input type="text" [(ngModel)]="extracted.document_type" />
       </div>
       <div class="field">
         <label>Currency</label>
-        <input type="text" [(ngModel)]="extracted.currency" [disabled]="loading" />
+        <input type="text" [(ngModel)]="extracted.currency" />
       </div>
       <div class="field">
         <label>Payment Method</label>
-        <input type="text" [(ngModel)]="extracted.payment_method" [disabled]="loading" />
+        <input type="text" [(ngModel)]="extracted.payment_method" />
       </div>
       <div class="field">
         <label>Invoice Number</label>
-        <input type="text" [(ngModel)]="extracted.invoice_number" [disabled]="loading" />
+        <input type="text" [(ngModel)]="extracted.invoice_number" />
       </div>
       <div class="field">
         <label>Date</label>
-        <input type="text" [(ngModel)]="extracted.invoice_date" [disabled]="loading" />
+        <input type="text" [(ngModel)]="extracted.invoice_date" />
       </div>
       <div class="field">
         <label>Due Date</label>
-        <input type="text" [(ngModel)]="extracted.due_date" [disabled]="loading" />
+        <input type="text" [(ngModel)]="extracted.due_date" />
       </div>
       <div class="field">
         <label>Total</label>
-        <input type="text" [(ngModel)]="extracted.total_amount" [disabled]="loading" />
+        <input type="text" [(ngModel)]="extracted.total_amount" />
       </div>
       <div class="field">
         <label>TVA</label>
-        <input type="text" [(ngModel)]="extracted.tax_amount" [disabled]="loading" />
+        <input type="text" [(ngModel)]="extracted.tax_amount" />
       </div>
     </div>
 
-    <div class="table-wrapper" *ngIf="extracted.line_items?.length">
+    <div class="table-wrapper" *ngIf="!dataLoading && extracted.line_items?.length">
       <table class="line-items-table">
         <thead>
           <tr>
@@ -77,33 +78,43 @@
       </table>
     </div>
 
-    <div class="confirm-button-container" *ngIf="!loading && (extracted?.invoice_date || extracted?.document_type)">
+    <div class="confirm-button-container" *ngIf="!dataLoading && (extracted?.invoice_date || extracted?.document_type)">
       <button class="btn" (click)="confirm()">Confirm Information</button>
     </div>
   </section>
 
+  <aside class="preview-drawer" [class.open]="drawerOpen" aria-label="Preview">
+    <header class="preview-header">
+      <h3>Preview</h3>
+    </header>
 
-<aside class="preview-drawer" [class.open]="drawerOpen" aria-label="Prévisualisation">
-  <header class="preview-header">
-    <h3>Preview</h3>
-  </header>
+    <div class="preview-body">
+      <div class="loading-container" *ngIf="previewLoading">
+        <div class="spinner"></div>
+        <p class="loading-text">Loading preview…</p>
+      </div>
 
-  <div class="preview-body">
-    <img
-      *ngIf="!isPdf && previewUrl"
-      [src]="previewUrl"
-      class="preview-media"
-    />
+      <img
+        *ngIf="!previewLoading && !isPdf && previewImgUrl"
+        [src]="previewImgUrl"
+        class="preview-media"
+        alt="Invoice preview" />
 
-    <iframe
-      *ngIf="isPdf && isBrowser && previewUrl"
-      [src]="previewUrl"
-      class="preview-media"
-      title="Aperçu PDF">
-    </iframe>
 
-    <p *ngIf="!previewUrl" class="preview-empty">No preview available!</p>
-  </div>
-</aside>
+      <object
+      *ngIf="drawerOpen && !previewLoading && isPdf && isBrowser && previewPdfUrl"
+      [data]="previewPdfUrl"
+      type="application/pdf"
+      class="preview-media">
+        <p class="preview-empty">
+          Unable to display the PDF preview.
+          <a [href]="previewPdfUrl" target="_blank" rel="noopener">Open in a new tab</a>.
+        </p>
+      </object>
 
+      <p *ngIf="!previewLoading && !previewImgUrl && !previewPdfUrl" class="preview-empty">
+        No preview available!
+      </p>
+    </div>
+  </aside>
 </div>
