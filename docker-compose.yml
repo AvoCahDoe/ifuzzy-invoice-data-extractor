@@ -47,7 +47,7 @@ services:
     entrypoint: ["/bin/sh","-lc"]
     command: >
       "ollama serve &
-       until curl -sf http://localhost:11434/api/tags > /dev/null; do sleep 1; done &&
+       until ollama list >/dev/null 2>&1; do sleep 1; done
        ollama pull mistral &&
        wait"
 

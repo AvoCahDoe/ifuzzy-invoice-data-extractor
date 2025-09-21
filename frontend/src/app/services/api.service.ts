@@ -1,13 +1,24 @@
-import { Injectable } from '@angular/core';
+import { Inject, Injectable, PLATFORM_ID } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
+import { isPlatformServer } from '@angular/common';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  private base = 'http://127.0.0.1:8000';
+  private base = 'http://backend:8000';
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) {
+    const isBrowser = typeof window !== 'undefined';
+
+    const browserBase = isBrowser
+      ? window.location.origin.replace(/:4000$/, ':8000')
+      : null;
+
+    const ssrBase = (globalThis as any)?.process?.env?.API_BASE_URL || 'http://backend:8000';
+
+    this.base = isBrowser ? (browserBase || 'http://localhost:8000') : ssrBase;
+  }
 
   upload(file: File): Observable<{ file_id: string }> {
     const form = new FormData();
