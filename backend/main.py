@@ -1,1195 +1,580 @@
-import os
-os.environ["GRPC_VERBOSITY"] = "ERROR"
-os.environ["GLOG_minloglevel"] = "2"
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-
-import asyncio
-import json
-import time
-import base64
-import tempfile
-from enum import Enum
-from io import BytesIO
-from io import BytesIO as _BytesIO
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-
-from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse, Response
-from fastapi.openapi.utils import get_openapi
+from datetime import datetime
+import uuid
+import httpx
+import os
+import time
+import json
+import re
+import logging
+import asyncio
+from pathlib import Path
+from pymongo import MongoClient
+import gridfs
+import unicodedata
+import base64
 
-from pydantic import BaseModel, Field, constr
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("backend")
 
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
-from bson import ObjectId
-
-from PIL import Image  
-from pypdf import PdfReader
-
-from marker.config.parser import ConfigParser
-from marker.logger import configure_logging, get_logger
-from marker.models import create_model_dict
-
-configure_logging()
-logger = get_logger()
-
-OPENAPI_TAGS = [
-    {"name": "Files", "description": "Upload, list, stream and delete files."},
-    {"name": "Extraction", "description": "Run OCR/Marker and fetch extraction results / structured JSON."},
-    {"name": "Tasks", "description": "Background pipeline: enqueue, state, outputs, validation, listing."},
-    {"name": "Health", "description": "Service health & readiness checks."},
-]
-
-app = FastAPI(
-    title="Invoice Extraction API",
-    description=(
-        "REST API for multi-invoice upload, parallel background processing, "
-        "extraction (PDF text-layer or Marker OCR), LLM-based structuring, validation and deletion."
-    ),
-    version="1.0.0",
-    contact={"name": "Digex", "email": "mohamed.baka@digex.ma"},
-    openapi_tags=OPENAPI_TAGS,
-)
-
-origins = [
-    "http://localhost:4000",
-    "http://127.0.0.1:4000",
-
-]
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,        
-    allow_credentials=True,       
+    allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],         
-    expose_headers=[
-        "Content-Length",
-        "Content-Range",
-        "Accept-Ranges",
-        "Content-Disposition",
-    ],
-    max_age=86400,
+    allow_headers=["*"],
 )
 
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],  
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+# Service URLs from Docker Compose
+MINERU_SERVICE_URL   = os.getenv("MINERU_SERVICE_URL",   "http://mineru_service:8002")
+MARKER_SERVICE_URL   = os.getenv("MARKER_SERVICE_URL",   "http://marker_service:8004")
+RAPIDOCR_SERVICE_URL = os.getenv("RAPIDOCR_SERVICE_URL", "http://rapidocr_service:8005")
 
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-client = AsyncIOMotorClient(MONGODB_URI)
-db = client.fileuploads
-fs = AsyncIOMotorGridFSBucket(db)
+LLAMA_CPP_HOST = os.getenv("LLAMA_CPP_HOST", "http://llamacpp:8003/v1")
+LLAMA_CPP_API_URL = (
+    f"{LLAMA_CPP_HOST}/chat/completions"
+    if LLAMA_CPP_HOST.endswith("/v1")
+    else f"{LLAMA_CPP_HOST}/v1/chat/completions"
+)
+
+ENGINE_URLS = {
+    "mineru":   MINERU_SERVICE_URL,
+    "marker":   MARKER_SERVICE_URL,
+    "rapidocr": RAPIDOCR_SERVICE_URL,
+}
+
+# Database
+MONGO_URI = os.getenv("MONGODB_URI", "mongodb://mongodb:27017")
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client.invoice_db
+files_col = db.files
 tasks_col = db.tasks
 
-ObjectIdStr = constr(pattern=r"^[a-fA-F0-9]{24}$")
-
-
-class ErrorResponse(BaseModel):
-    detail: str = Field(..., example="File not found")
-
-
-class UploadResponse(BaseModel):
-    message: str = Field("File uploaded successfully")
-    file_id: ObjectIdStr
-
-
-class FileItem(BaseModel):
-    id: ObjectIdStr
-    filename: str
-    upload_date: Optional[str] = Field(None, example="2025-09-08 12:34")
-    content_type: Optional[str] = Field(None, example="application/pdf")
-    length: Optional[int] = Field(None, example=123456)
-    processed: bool = False
-
-
-class FilesResponse(BaseModel):
-    files: List[FileItem] = []
-
-
-class ExtractionPayload(BaseModel):
-    file_name: str
-    original_path: str
-    content: str
-    images: List[Dict[str, Any]] = []
-    images_count: int
-    extraction_timestamp: float
-    processing_time: float
-    extraction_mode: str = Field(..., example="pdf_text_layer")
-
-
-class ProcessResponse(BaseModel):
-    message: str = "File processed successfully"
-    extraction_id: ObjectIdStr
-    extraction: ExtractionPayload
-
-
-class ExtractionDoc(BaseModel):
-    _id: Optional[ObjectIdStr] = None
-    file_id: ObjectIdStr
-    extraction_data: ExtractionPayload
-
-
-class GetExtractionResponse(BaseModel):
-    extraction: ExtractionDoc
-
-
-class StructureResponse(BaseModel):
-    message: str = "Structured data extracted and saved."
-    data: Dict[str, Any]
-
-
-class UpdateResponse(BaseModel):
-    message: str = "Données mises à jour avec succès"
-
-
-class HealthResponse(BaseModel):
-    mongo: bool
-    ollama: bool
-
-
-class TaskSendPayload(BaseModel):
-    file_id: str
-    force_ocr: bool = False
-    do_structure: bool = True
-    client_token: Optional[str] = None 
-
-
-class TaskSendResponse(BaseModel):
-    task_id: ObjectIdStr
-    status: str
-
-
-class TaskStateResponse(BaseModel):
-    task_id: ObjectIdStr
-    status: str
-    error: Optional[str] = None
-    file_id: Optional[ObjectIdStr] = None
-    extraction_id: Optional[ObjectIdStr] = None
-    structured_id: Optional[ObjectIdStr] = None
-    updated_at: Optional[str] = Field(None, example="2025-09-08 13:45")
-
-
-class TaskTextResponse(BaseModel):
-    file_id: ObjectIdStr
-    content: str
-    images_count: int
-    extraction_mode: Optional[str] = None
-
-
-class TaskDataResponse(BaseModel):
-    file_id: ObjectIdStr
-    data: Dict[str, Any]
-
-
-class TaskListItem(BaseModel):
-    task_id: ObjectIdStr
-    status: str
-    file_id: Optional[ObjectIdStr] = None
-    filename: Optional[str] = ""
-    extraction_id: Optional[ObjectIdStr] = None
-    structured_id: Optional[ObjectIdStr] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-    client_token: Optional[str] = None
-
-
-class TaskListResponse(BaseModel):
-    tasks: List[TaskListItem] = []
-
-def to_oid(value) -> ObjectId:
-    if isinstance(value, ObjectId):
-        return value
-    try:
-        return ObjectId(str(value))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid file ID")
-
-
-def fmt(dt: Optional[datetime]) -> Optional[str]:
-    if not dt:
-        return None
-    return dt.strftime("%Y-%m-%d %H:%M")
-
-def _pdf_is_readable(pdf_bytes: bytes, min_chars: int = 50, sample_pages: int = 1) -> bool:
-    try:
-        reader = PdfReader(_BytesIO(pdf_bytes))
-        if len(reader.pages) == 0:
-            return False
-        pages_to_sample = min(len(reader.pages), sample_pages)
-        char_count = 0
-        for i in range(pages_to_sample):
-            txt = reader.pages[i].extract_text() or ""
-            char_count += len((txt or "").strip())
-        return char_count >= min_chars
-    except Exception:
-        return False
-
-
-def _pdf_extract_text(pdf_bytes: bytes) -> str:
-    reader = PdfReader(_BytesIO(pdf_bytes))
-    texts = []
-    for p in reader.pages:
-        texts.append(p.extract_text() or "")
-    return "\n\n".join(texts).strip()
-
-marker_models = None
-
-
-async def get_marker_models():
-    global marker_models
-    if marker_models is None:
-        logger.info("Loading marker models...")
-        marker_models = await asyncio.to_thread(create_model_dict)
-        logger.info("Marker models loaded successfully")
-    return marker_models
-
-def image_to_base64(img):
-    if hasattr(img, 'save'):  
-        buffer = BytesIO()
-        img.save(buffer, format='PNG')
-        img_str = base64.b64encode(buffer.getvalue()).decode()
-        return {
-            "format": "PNG",
-            "data": img_str,
-            "size": getattr(img, 'size', None),
-        }
-    elif isinstance(img, str):
-        return {"path": img}
-    else:
-        return {"error": "Unsupported image format"}
-
-
-def extract_markdown_content(rendered_obj):
-    if hasattr(rendered_obj, 'text'):
-        return rendered_obj.text
-    elif hasattr(rendered_obj, 'markdown'):
-        return rendered_obj.markdown
-    else:
-        rendered_str = str(rendered_obj)
-        if rendered_str.startswith('markdown="') and '" images=' in rendered_str:
-            start_idx = len('markdown="')
-            end_idx = rendered_str.find('" images=')
-            if end_idx != -1:
-                markdown_content = rendered_str[start_idx:end_idx]
-                markdown_content = (
-                    markdown_content
-                    .replace('\\n', '\n')
-                    .replace('\\"', '"')
-                    .replace('\\\\', '\\')
-                )
-                return markdown_content
-        return rendered_str
-
-async def extract_content_from_file(file_content: bytes, original_filename: str, force_ocr: bool = False):
-    try:
-        models = await get_marker_models()
-
-        file_path = Path(original_filename)
-        suffix = file_path.suffix.lower() if file_path.suffix else '.pdf'
-
-        start_time = time.time()
-
-        if not force_ocr and suffix == '.pdf' and _pdf_is_readable(file_content):
-            try:
-                content_text = _pdf_extract_text(file_content)
-                result_data = {
-                    "file_name": file_path.stem,
-                    "original_path": original_filename,
-                    "content": content_text,
-                    "images": [],
-                    "images_count": 0,
-                    "extraction_timestamp": time.time(),
-                    "processing_time": time.time() - start_time,
-                    "extraction_mode": "pdf_text_layer",
-                }
-                return result_data
-            except Exception as e:
-                logger.warning(f"Readable-PDF path failed, falling back to OCR: {e}")
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or '.pdf') as temp_file:
-            temp_file.write(file_content)
-            temp_file_path = temp_file.name
-
-        try:
-            try:
-                config_dict = {
-                    'output_format': 'markdown',
-                    'extract_images': False,
-                    'batch_multiplier': 1,
-                    'max_pages': None,
-                    'langs': None,
-                    'output_dir': None,
-                    'debug': False
-                }
-                config_parser = ConfigParser(config_dict)
-                converter_cls = config_parser.get_converter_cls()
-                converter = converter_cls(
-                    config=config_parser.generate_config_dict(),
-                    artifact_dict=models,
-                    processor_list=config_parser.get_processors(),
-                    renderer=config_parser.get_renderer(),
-                    llm_service=config_parser.get_llm_service(),
-                )
-                rendered = await asyncio.to_thread(converter, temp_file_path)
-
-            except Exception as config_error:
-                logger.warning(f"Marker config/init failed, trying simple convert: {config_error}")
-                from marker.convert import convert_single_pdf
-                result = await asyncio.to_thread(convert_single_pdf, temp_file_path, models)
-                if isinstance(result, tuple) and len(result) >= 2:
-                    content = result[0] if isinstance(result[0], str) else str(result[0])
-                    images = result[1] if len(result) > 1 else {}
-                else:
-                    content = str(result)
-                    images = {}
-
-                class SimpleRendered:
-                    def __init__(self, content, images):
-                        self.text = content
-                        self.markdown = content
-                        self.images = images
-                rendered = SimpleRendered(content, images)
-
-            content = extract_markdown_content(rendered)
-
-            serialized_images = []
-            if hasattr(rendered, 'images') and rendered.images:
-                if isinstance(rendered.images, dict):
-                    for img_name, img_obj in rendered.images.items():
-                        try:
-                            serialized_img = image_to_base64(img_obj)
-                            serialized_img["name"] = img_name
-                            serialized_img["index"] = len(serialized_images)
-                            serialized_images.append(serialized_img)
-                        except Exception as e:
-                            logger.warning(f"Could not serialize image {img_name}: {e}")
-                            serialized_images.append({
-                                "name": img_name,
-                                "index": len(serialized_images),
-                                "error": str(e)
-                            })
-                else:
-                    for i, img in enumerate(rendered.images):
-                        try:
-                            serialized_img = image_to_base64(img)
-                            serialized_img["index"] = i
-                            serialized_images.append(serialized_img)
-                        except Exception as e:
-                            logger.warning(f"Could not serialize image {i}: {e}")
-                            serialized_images.append({"index": i, "error": str(e)})
-
-            result_data = {
-                "file_name": file_path.stem,
-                "original_path": original_filename,
-                "content": content,
-                "images": serialized_images,
-                "images_count": len(serialized_images),
-                "extraction_timestamp": time.time(),
-                "processing_time": time.time() - start_time,
-                "extraction_mode": "marker_ocr",
-            }
-            return result_data
-
-        finally:
-            try:
-                os.unlink(temp_file_path)
-            except Exception:
-                pass
-
-    except Exception as e:
-        logger.error(f"Error during extraction: {e}")
-        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
-
-
-@app.post(
-    "/upload",
-    tags=["Files"],
-    summary="Upload a file to GridFS",
-    description="Accepts PDF/PNG/JPEG and stores it in MongoDB GridFS.",
-    response_model=UploadResponse,
-    responses={500: {"model": ErrorResponse}},
-)
-async def upload_file(file: UploadFile = File(...)):
-    try:
-        print(f"Receiving file: {file.filename}, Content-Type: {file.content_type}")
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="No file uploaded")
-        metadata = {
-            "upload_date": datetime.utcnow(),
-            "content_type": file.content_type,
-            "original_filename": file.filename,
-            "processed": False
-        }
-        file_id = await fs.upload_from_stream(file.filename, file.file, metadata=metadata)
-        print(f"Upload successful, ID: {file_id}")
-        return {"message": "File uploaded successfully", "file_id": str(file_id)}
-    except Exception as e:
-        print("Error during upload:", str(e))
-        raise HTTPException(status_code=500, detail="Failed to upload file")
-
-
-@app.get(
-    "/files",
-    tags=["Files"],
-    summary="List uploaded files",
-    response_model=FilesResponse
-)
+# Output directory for processed files
+OUTPUT_DIR = Path("/app/processed_output")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+(OUTPUT_DIR / "ocr").mkdir(exist_ok=True)
+(OUTPUT_DIR / "structure").mkdir(exist_ok=True)
+(OUTPUT_DIR / "images").mkdir(exist_ok=True)
+
+# ---------------------------------------------------------------------------
+# Health & file management
+# ---------------------------------------------------------------------------
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.get("/files")
 async def list_files():
-    try:
-        cursor = db.fs.files.find({})
-        files = await cursor.to_list(length=100)
-        if not files:
-            return {"files": []}
-        result = []
-        for file in files:
-            result.append({
-                "id": str(file["_id"]),
-                "filename": file.get("filename"),
-                "upload_date": fmt(file.get("metadata", {}).get("upload_date")),
-                "content_type": file.get("metadata", {}).get("content_type"),
-                "length": file.get("length"),
-                "processed": file.get("metadata", {}).get("processed", False)
-            })
-        return {"files": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    files = []
+    for doc in files_col.find().sort("upload_date", -1):
+        files.append({
+            "id": str(doc["_id"]),
+            "filename": doc["filename"],
+            "upload_date": doc["upload_date"],
+            "processed": doc.get("processed", False),
+        })
+    return {"files": files}
 
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    file_id = str(uuid.uuid4())
+    content = await file.read()
 
-# @app.get(
-#     "/files/raw/{file_id}",
-#     tags=["Files"],
-#     summary="Stream original file bytes"
-# )
-# async def file_raw(file_id: str):
-#     oid = to_oid(file_id)
-#     file_doc = await db.fs.files.find_one({"_id": oid})
-#     if not file_doc:
-#         raise HTTPException(status_code=404, detail="File not found")
-#     grid_out = await fs.open_download_stream(oid)
-#     content_type = file_doc.get("metadata", {}).get("content_type") or "application/octet-stream"
+    fs = gridfs.GridFS(db)
+    fs.put(content, filename=file.filename, _id=file_id)
 
-#     async def _iter():
-#         while True:
-#             chunk = await grid_out.readchunk()
-#             if not chunk:
-#                 break
-#             yield chunk
-#     return StreamingResponse(_iter(), media_type=content_type)
-import mimetypes, re
-from fastapi import HTTPException, Request
-from fastapi.responses import StreamingResponse
+    files_col.insert_one({
+        "_id": file_id,
+        "filename": file.filename,
+        "upload_date": datetime.utcnow().isoformat(),
+        "processed": False,
+    })
+    return {"file_id": file_id, "filename": file.filename}
 
-@app.get(
-    "/files/raw/{file_id}",
-    tags=["Files"],
-    summary="Stream original file bytes"
-)
-async def file_raw(file_id: str, request: Request):
-    oid = to_oid(file_id)
-    file_doc = await db.fs.files.find_one({"_id": oid})
-    if not file_doc:
+@app.delete("/files/{file_id}")
+async def delete_file(file_id: str):
+    result = files_col.delete_one({"_id": file_id})
+    if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="File not found")
+    fs = gridfs.GridFS(db)
+    if fs.exists(_id=file_id):
+        fs.delete(file_id)
+        
+    tasks_col.delete_many({"file_id": file_id})
+    db.ocr_data.delete_many({"file_id": file_id})
+    db.structured_data.delete_many({"file_id": file_id})
+    db.extractions.delete_many({"file_id": file_id}) # For good measure
+    
+    return {"status": "deleted", "file_id": file_id}
 
-    filename = file_doc.get("filename") or f"{file_id}"
-    total_len = int(file_doc.get("length") or 0)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    meta_ct = (file_doc.get("metadata") or {}).get("content_type") \
-              or (file_doc.get("metadata") or {}).get("contentType")
-    guess_ct = mimetypes.guess_type(filename)[0]
-    content_type = meta_ct or guess_ct or "application/octet-stream"
+def clean_markdown(text: str) -> str:
+    """Remove excessive whitespace and control characters from OCR output."""
+    if not text:
+        return ""
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = "".join(ch for ch in text if unicodedata.category(ch)[0] != "C" or ch in "\n\t\r")
+    return text.strip()
 
-    if filename.lower().endswith(".pdf"):
-        content_type = "application/pdf"
-
-    disp = f'inline; filename="{filename}"'
-
-    grid_out = await fs.open_download_stream(oid)
-
-    range_header = request.headers.get("range") or request.headers.get("Range")
-    start = 0
-    end = (total_len - 1) if total_len else None
-    status_code = 200
-    headers = {
-        "Content-Disposition": disp,
-        "Accept-Ranges": "bytes",
-    }
-
-    if range_header and total_len:
-        m = re.match(r"bytes=(\d*)-(\d*)", range_header)
-        if m:
-            g1, g2 = m.groups()
-            if g1 == "" and g2 == "":
-                
-                pass
-            else:
-                if g1 != "":
-                    start = int(g1)
-                if g2 != "":
-                    end = int(g2)
-                else:
-                    end = total_len - 1
-                if start < 0: start = 0
-                if end >= total_len: end = total_len - 1
-                if start > end:
-                    raise HTTPException(status_code=416, detail="Requested Range Not Satisfiable")
-
-                status_code = 206  
-                headers["Content-Range"] = f"bytes {start}-{end}/{total_len}"
-                headers["Content-Length"] = str(end - start + 1)
-
-                await grid_out.seek(start)
-
-    if status_code == 200 and total_len:
-        headers["Content-Length"] = str(total_len)
-
-    async def _iter_range():
-        remaining = None if end is None else (end - start + 1)
-        chunk_size = int(file_doc.get("chunkSize") or 255 * 1024)  
-        while True:
-            to_read = chunk_size if remaining is None else min(chunk_size, remaining)
-            if to_read is not None and to_read <= 0:
-                break
-            chunk = await grid_out.read(to_read)  
-            if not chunk:
-                break
-            if remaining is not None:
-                remaining -= len(chunk)
-            yield chunk
-
-    return StreamingResponse(
-        _iter_range(),
-        status_code=status_code,
-        media_type=content_type,
-        headers=headers,
-    )
-
-
-@app.post(
-    "/process/{file_id}",
-    tags=["Extraction"],
-    summary="Process a file now",
-    description="Runs fast text-layer extraction for readable PDFs, else Marker OCR.",
-    response_model=ProcessResponse,
-    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
-)
-async def process_file(file_id: str, force_ocr: bool = False):
+def extract_json_from_llm(content: str) -> dict:
+    """Robustly extract JSON from LLM output (handles markdown fences, stray text, truncation)."""
+    # 1. Direct parse
     try:
-        obj_id = to_oid(file_id)
+        return json.loads(content)
+    except json.JSONDecodeError:
+        pass
+    # 2. Markdown code fence
+    match = re.search(r"```(?:json)?\s*(\{[^`]*\})\s*```", content, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except Exception:
+            pass
+    # 3. Largest {...} block between first { and last }
+    start = content.find('{')
+    end = content.rfind('}')
+    if start != -1 and end != -1:
+        try:
+            return json.loads(content[start:end + 1])
+        except Exception:
+            pass
+    # 4. Truncation recovery — LLM hit token limit mid-JSON.
+    #    Find the start, then surgically close open structures.
+    if start != -1:
+        fragment = content[start:]
+        # Close open string if needed
+        if fragment.count('"') % 2 == 1:
+            fragment += '"'
+        # Count open brackets/braces and close them
+        depth_brace = fragment.count('{') - fragment.count('}')
+        depth_bracket = fragment.count('[') - fragment.count(']')
+        # Drop the last incomplete item (trailing comma or partial key-value)
+        fragment = re.sub(r',\s*$', '', fragment.rstrip())
+        fragment = re.sub(r',\s*"[^"]*"\s*:\s*[^,}\]]*$', '', fragment)
+        fragment += ']' * max(0, depth_bracket) + '}' * max(0, depth_brace)
+        try:
+            return json.loads(fragment)
+        except Exception:
+            pass
+    logger.error(f"LLM produced invalid JSON parsing fallback text:\n{content}")
+    raise ValueError(f"Could not extract valid JSON from LLM output. Raw Output was: {content[:500]}")
 
-        file_doc = await db.fs.files.find_one({"_id": obj_id})
-        if not file_doc:
-            raise HTTPException(status_code=404, detail="File not found")
+async def update_task_status(task_id: str, status: str, error: str = None):
+    update = {"status": status, "updated_at": datetime.utcnow().isoformat()}
+    if error:
+        update["error"] = error
+    tasks_col.update_one({"_id": task_id}, {"$set": update})
 
-        if file_doc.get("metadata", {}).get("processed", False) and not force_ocr:
-            existing_extraction = await db.extractions.find_one({"file_id": obj_id})
-            if existing_extraction:
-                existing_extraction["_id"] = str(existing_extraction["_id"])
-                existing_extraction["file_id"] = str(existing_extraction["file_id"])
-                return {"message": "File already processed", "extraction": existing_extraction}
+async def call_extraction_service(engine: str, filename: str, file_content: bytes) -> dict:
+    """Call the chosen OCR engine service and return its JSON response."""
+    url = ENGINE_URLS.get(engine)
+    if not url:
+        raise ValueError(f"Unknown engine: {engine}. Valid: {list(ENGINE_URLS)}")
 
-        grid_out = await fs.open_download_stream(obj_id)
-        file_content = await grid_out.read()
+    files = {"file": (filename, file_content, "application/octet-stream")}
+    data  = {"force_ocr": "false", "use_llm": "false"}
 
-        original_filename = file_doc.get("filename", "unknown")
+    async with httpx.AsyncClient(timeout=600.0) as client:
+        resp = await client.post(f"{url}/convert", files=files, data=data)
+        if resp.status_code != 200:
+            raise Exception(f"Engine '{engine}' returned {resp.status_code}: {resp.text[:300]}")
+        return resp.json()
 
-        logger.info(f"Starting extraction for file: {original_filename} (force_ocr={force_ocr})")
-        extraction_result = await extract_content_from_file(file_content, original_filename, force_ocr=force_ocr)
+# ---------------------------------------------------------------------------
+# Task endpoints
+# ---------------------------------------------------------------------------
 
-        extraction_doc = {
-            "file_id": obj_id,
-            "original_filename": original_filename,
-            "extraction_data": extraction_result,
-            "created_at": datetime.utcnow()
-        }
+@app.post("/task/send")
+async def task_send(payload: dict = Body(...)):
+    file_id    = payload.get("file_id")
+    engine     = payload.get("engine", "rapidocr")   # default → RapidOCR
+    do_structure = payload.get("do_structure", True)
 
-        existing = await db.extractions.find_one({"file_id": obj_id})
-        if existing and force_ocr:
-            await db.extractions.update_one(
-                {"_id": existing["_id"]},
-                {"$set": extraction_doc}
-            )
-            insertion_id = existing["_id"]
-        elif existing:
-            insertion_id = existing["_id"]
-        else:
-            insert_res = await db.extractions.insert_one(extraction_doc)
-            insertion_id = insert_res.inserted_id
+    task_id = str(uuid.uuid4())
+    tasks_col.insert_one({
+        "_id": task_id,
+        "file_id": file_id,
+        "status": "queued",
+        "engine": engine,
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+    })
 
-        await db.fs.files.update_one(
-            {"_id": obj_id},
-            {"$set": {"metadata.processed": True, "metadata.processed_at": datetime.utcnow()}}
-        )
+    asyncio.create_task(run_task(task_id, file_id, engine, do_structure))
+    return {"task_id": task_id, "status": "queued"}
 
-        logger.info(f"Extraction completed and stored for file: {original_filename}")
-
-        return {
-            "message": "File processed successfully",
-            "extraction_id": str(insertion_id),
-            "extraction": extraction_result
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error processing file {file_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
-
-
-@app.get(
-    "/extraction/{file_id}",
-    tags=["Extraction"],
-    summary="Get extraction result",
-    response_model=GetExtractionResponse,
-    responses={404: {"model": ErrorResponse}}
-)
-async def get_extraction(file_id: str):
+async def run_task(task_id, file_id, engine, do_structure):
     try:
-        obj_id = to_oid(file_id)
-        extraction = await db.extractions.find_one({"file_id": obj_id})
+        await update_task_status(task_id, "initializing")
 
-        if not extraction:
-            raise HTTPException(status_code=404, detail="Extraction not found")
+        fs = gridfs.GridFS(db)
+        if not fs.exists(_id=file_id):
+            raise ValueError(f"File {file_id} not found in GridFS")
 
-        extraction["_id"] = str(extraction["_id"])
-        extraction["file_id"] = str(extraction["file_id"])
+        grid_out     = fs.get(file_id)
+        file_content = grid_out.read()
+        filename     = grid_out.filename
 
-        return {"extraction": extraction}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-import ollama
-
-
-@app.post(
-    "/structure/{file_id}",
-    tags=["Extraction"],
-    summary="LLM structuring to JSON",
-    description="Uses Ollama (mistral) to convert extracted Markdown into strict JSON fields.",
-    response_model=StructureResponse,
-    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
-)
-async def structure_extraction(file_id: str):
-    try:
-        obj_id = to_oid(file_id)
-
-        extraction_doc = await db.extractions.find_one({"file_id": obj_id})
-        if not extraction_doc or "extraction_data" not in extraction_doc:
-            raise HTTPException(status_code=404, detail="No extracted data found for this file")
-
-        markdown_text = extraction_doc["extraction_data"]["content"]
-
-        prompt = f"""
-Vous êtes un assistant intelligent chargé d’extraire les informations essentielles d’une facture ou d’un bon de livraison en format Markdown.
-
-Le texte contient une ou plusieurs images, des sections, des tableaux et des montants. Analysez uniquement le contenu textuel et ignorez les images.
-
-Retournez le résultat **au format JSON** contenant les champs suivants :
-
-- "document_type" : Type de document (exemple : "Facture", "Bon de livraison", etc.)
-- "currency" : Devise utilisée (exemple : "MAD", "EUR", etc.)
-- "payment_method" : Méthode de paiement (exemple : "Virement Bancaire", "Espèces", etc.)
-- "invoice_number" : Numéro de facture ou de bon de livraison
-- "invoice_date" : Date du document (format : JJ.MM.AAAA)
-- "due_date" : Date d’échéance (si elle existe)
-- "total_amount" : Montant total TTC
-- "tax_amount" : Montant total de la TVA
-- "line_items" : Une liste d’objets représentant les lignes du tableau d’articles avec les champs suivants :
-  - name : Nom ou désignation de l’article
-  - quantity : Quantité
-  - unit_price : Prix unitaire
-  - packaging : Emballage
-  - unit : Unité
-  - total_ht : Total HT pour cette ligne
-
-Si une information n’est pas présente, retournez une chaîne vide.
-
-Voici le texte à analyser :
----
-{markdown_text}
----
-Rends uniquement un objet JSON valide avec les noms de champs exacts ci-dessus, sans texte explicatif, sans commentaire.
-"""
-        response = await asyncio.to_thread(
-            ollama.chat,
-            model="mistral",
-            messages=[{"role": "user", "content": prompt}],
-        )
-        result = response["message"]["content"]
+        # ── 1. Extraction (with automatic fallback) ──────────────────────────
+        await update_task_status(task_id, f"extracting_with_{engine}")
+        start_ext = time.time()
 
         try:
-            structured_data = json.loads(result)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=500, detail="Ollama returned invalid JSON")
+            extract_data = await call_extraction_service(engine, filename, file_content)
+        except Exception as primary_err:
+            logger.warning(f"Engine '{engine}' failed: {primary_err}. Trying fallback.")
+            # Fallback order: rapidocr → marker → mineru
+            fallback_order = [e for e in ("rapidocr", "marker", "mineru") if e != engine]
+            extract_data = None
+            for fallback in fallback_order:
+                await update_task_status(task_id, f"fallback_to_{fallback}")
+                try:
+                    extract_data = await call_extraction_service(fallback, filename, file_content)
+                    engine = fallback
+                    break
+                except Exception as fb_err:
+                    logger.warning(f"Fallback '{fallback}' also failed: {fb_err}")
+            if extract_data is None:
+                raise Exception(f"All engines failed. Last error: {primary_err}")
 
-        await db.structured_data.insert_one({
-            "file_id": obj_id,
-            "structured_json": structured_data,
-            "created_at": datetime.utcnow()
-        })
+        ext_time = time.time() - start_ext
 
-        return {
-            "message": "Structured data extracted and saved.",
-            "data": structured_data
-        }
+        # ── 2. Clean text ─────────────────────────────────────────────────────
+        await update_task_status(task_id, "cleaning_text")
+        cleaned_md = clean_markdown(extract_data.get("content", ""))
+        extract_data["content"] = cleaned_md
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error structuring file {file_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Structuring failed: {str(e)}")
+        # Save OCR markdown
+        ocr_path = OUTPUT_DIR / "ocr" / f"{Path(filename).stem}_{task_id[:8]}.md"
+        ocr_path.write_text(cleaned_md, encoding="utf-8")
 
-
-@app.put(
-    "/update/{file_id}",
-    tags=["Extraction"],
-    summary="Update structured JSON",
-    description="Save user-edited fields after validation.",
-    response_model=UpdateResponse,
-    responses={404: {"model": ErrorResponse}},
-)
-async def update_structured_data(
-    file_id: str,
-    updated_data: dict = Body(
-        ...,
-        example={
-            "document_type": "Facture",
-            "currency": "MAD",
-            "invoice_number": "INV-2025-001",
-            "invoice_date": "08.09.2025",
-            "line_items": [{"name": "Article A", "quantity": 2, "unit_price": "50", "total_ht": "100"}],
-            "total_amount": "120",
-            "tax_amount": "20",
-            "payment_method": "Virement",
-        },
-    ),
-):
-    try:
-        obj_id = to_oid(file_id)
-        result = await db.structured_data.update_one(
-            {"file_id": obj_id},
-            {"$set": {"structured_json": updated_data}}
-        )
-        await db.tasks.update_one(
-            {"file_id": obj_id},
-            {"$set": {"status": TaskStatus.VALIDATED, "validated_at": datetime.utcnow()}}
-        )
-        if result.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Données structurées non trouvées")
-
-        return {"message": "Données mises à jour avec succès"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur de mise à jour : {str(e)}")
-
-
-@app.get(
-    "/health",
-    tags=["Health"],
-    summary="Health check",
-    response_model=HealthResponse
-)
-async def health():
-    ok = {"mongo": False, "ollama": False}
-    try:
-        await db.command("ping")
-        ok["mongo"] = True
-    except Exception:
-        pass
-    try:
-        _ = ollama.list()
-        ok["ollama"] = True
-    except Exception:
-        pass
-    return JSONResponse(ok, status_code=200 if all(ok.values()) else 503)
-
-
-class TaskStatus(str, Enum):
-    QUEUED = "queued"
-    EXTRACTING = "extracting"
-    EXTRACTED = "extracted"
-    STRUCTURING = "structuring"
-    DONE = "done"
-    VALIDATED = "validated"
-    ERROR = "error"
-
-
-async def _task_set(task_id: ObjectId, **patch):
-    patch.setdefault("updated_at", datetime.utcnow())
-    await tasks_col.update_one({"_id": task_id}, {"$set": patch})
-
-
-async def _get_file_doc_or_404(file_id: str):
-    obj_id = to_oid(file_id)
-    file_doc = await db.fs.files.find_one({"_id": obj_id})
-    if not file_doc:
-        raise HTTPException(status_code=404, detail="File not found")
-    return obj_id, file_doc
-
-
-async def _run_task(task_id: ObjectId):
-    task = await tasks_col.find_one({"_id": task_id})
-    if not task:
-        return
-
-    file_id: ObjectId = task["file_id"]
-    force_ocr: bool = task.get("force_ocr", False)
-    do_structure: bool = task.get("do_structure", True)
-
-    try:
-        await _task_set(task_id, status=TaskStatus.EXTRACTING)
-
-        grid_out = await fs.open_download_stream(file_id)
-        file_content = await grid_out.read()
-        file_doc = await db.fs.files.find_one({"_id": file_id})
-        original_filename = file_doc.get("filename", "unknown")
-
-        extraction_result = await extract_content_from_file(
-            file_content, original_filename, force_ocr=force_ocr
-        )
-
-        extraction_doc = {
-            "file_id": file_id,
-            "original_filename": original_filename,
-            "extraction_data": extraction_result,
-            "created_at": datetime.utcnow(),
-        }
-        existing = await db.extractions.find_one({"file_id": file_id})
-        if existing:
-            await db.extractions.update_one({"_id": existing["_id"]}, {"$set": extraction_doc})
-            extraction_id = existing["_id"]
-        else:
-            ins = await db.extractions.insert_one(extraction_doc)
-            extraction_id = ins.inserted_id
-
-        await db.fs.files.update_one(
-            {"_id": file_id},
-            {"$set": {"metadata.processed": True, "metadata.processed_at": datetime.utcnow()}},
-        )
-
-        await _task_set(task_id, status=TaskStatus.EXTRACTED, extraction_id=extraction_id)
-
-        if do_structure:
-            await _task_set(task_id, status=TaskStatus.STRUCTURING)
-
-            markdown_text = extraction_result["content"]
-            prompt = f"""
-Vous êtes un assistant intelligent chargé d’extraire les informations essentielles d’une facture ou d’un bon de livraison en format Markdown.
-
-Le texte contient une ou plusieurs images, des sections, des tableaux et des montants. Analysez uniquement le contenu textuel et ignorez les images.
-
-Retournez le résultat **au format JSON** contenant les champs suivants :
-
-- "document_type" : Type de document (exemple : "Facture", "Bon de livraison", etc.)
-- "currency" : Devise utilisée (exemple : "MAD", "EUR", etc.)
-- "payment_method" : Méthode de paiement (exemple : "Virement Bancaire", "Espèces", etc.)
-- "invoice_number" : Numéro de facture ou de bon de livraison
-- "invoice_date" : Date du document (format : JJ.MM.AAAA)
-- "due_date" : Date d’échéance (si elle existe)
-- "total_amount" : Montant total TTC
-- "tax_amount" : Montant total de la TVA
-- "line_items" : Une liste d’objets représentant les lignes du tableau d’articles avec les champs suivants :
-  - name : Nom ou désignation de l’article
-  - quantity : Quantité
-  - unit_price : Prix unitaire
-  - packaging : Emballage
-  - unit : Unité
-  - total_ht : Total HT pour cette ligne
-
-Si une information n’est pas présente, retournez une chaîne vide.
-
-Voici le texte à analyser :
----
-{markdown_text}
----
-Rends uniquement un objet JSON valide avec les noms de champs exacts ci-dessus, sans texte explicatif, sans commentaire.
-"""
-            response = await asyncio.to_thread(
-                ollama.chat,
-                model="mistral",
-                messages=[{"role": "user", "content": prompt}],
-            )
-            result = response["message"]["content"]
+        # Save extracted images (base64 → file)
+        images = extract_data.get("images", [])
+        saved_img_paths = []
+        for idx, img in enumerate(images):
             try:
-                structured_data = json.loads(result)
-            except json.JSONDecodeError:
-                raise RuntimeError("Ollama returned invalid JSON")
+                img_bytes = base64.b64decode(img["data"])
+                ext       = img.get("format", "png").lower()
+                img_path  = OUTPUT_DIR / "images" / f"{Path(filename).stem}_{task_id[:8]}_{idx}.{ext}"
+                img_path.write_bytes(img_bytes)
+                saved_img_paths.append(str(img_path))
+            except Exception as e:
+                logger.error(f"Failed to save image {idx}: {e}")
 
-            sdoc = {"file_id": file_id, "structured_json": structured_data, "created_at": datetime.utcnow()}
-            existing_s = await db.structured_data.find_one({"file_id": file_id})
-            if existing_s:
-                await db.structured_data.update_one({"_id": existing_s["_id"]}, {"$set": sdoc})
-                structured_id = existing_s["_id"]
-            else:
-                ins_s = await db.structured_data.insert_one(sdoc)
-                structured_id = ins_s.inserted_id
+        db.extractions.update_one(
+            {"file_id": file_id},
+            {"$set": {
+                "result": extract_data,
+                "engine": engine,
+                "processing_time": ext_time,
+                "local_ocr_path": str(ocr_path),
+                "local_images_paths": saved_img_paths,
+            }},
+            upsert=True,
+        )
+        tasks_col.update_one({"_id": task_id}, {"$set": {"status": "extracted", "processing_time": ext_time}})
 
-            await _task_set(task_id, structured_id=structured_id)
+        # ── 3. LLM Structuring ────────────────────────────────────────────────
+        if do_structure:
+            await update_task_status(task_id, "structuring_with_llm")
 
-        await _task_set(task_id, status=TaskStatus.DONE)
+            ctx = cleaned_md[:15000] + "\n...[truncated]" if len(cleaned_md) > 15000 else cleaned_md
+            
+            # --- Regex Hint System ---
+            hints = []
+            if re.search(r'\$|USD', ctx, re.IGNORECASE): hints.append("Currency is USD")
+            elif re.search(r'CAD', ctx, re.IGNORECASE): hints.append("Currency is CAD")
+            elif re.search(r'€|EUR', ctx, re.IGNORECASE): hints.append("Currency is EUR")
+            elif re.search(r'£|GBP', ctx, re.IGNORECASE): hints.append("Currency is GBP")
+                
+            dates = re.findall(r'(?i)(?:Invoice date|Date|Completed)[\s:]*([A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4})', ctx)
+            if dates: hints.append(f"Date is likely {dates[0].strip()}")
+                
+            inv_nums = re.findall(r'(?i)(?:Invoice(?: No\.?|#|:)?|Meld\s*#|Ref\s*#)[\s]*([A-Za-z0-9_-]+)', ctx)
+            if inv_nums: hints.append(f"Invoice Number is likely {inv_nums[0].strip()}")
+                
+            totals = re.findall(r'(?i)Total[\s:]*\$?([0-9,.]+)', ctx)
+            if totals: hints.append(f"Total Amount is likely {totals[-1].strip()}")
+                
+            subtotals = re.findall(r'(?i)(?:Subtotal)[\s:]*\$?([0-9,.]+)', ctx)
+            if subtotals: hints.append(f"Subtotal is likely {subtotals[0].strip()}")
+                
+            hint_str = ""
+            if hints:
+                hint_str = "=== CONFIDENCE HINTS ===\nBased on pattern matching, use these values if applicable:\n"
+                for h in set(hints): hint_str += f"- {h}\n"
+                hint_str += "========================\n\n"
+            # -------------------------
+
+            start_struct = time.time()
+
+            schema_obj = {
+                "type": "object",
+                "properties": {
+                    "document_type":  {"type": "string", "enum": ["Facture", "Devis", "Bon de commande", "Other"]},
+                    "invoice_number": {"type": ["string", "null"]},
+                    "date":           {"type": ["string", "null"]},
+                    "total_amount":   {"type": ["number", "null"]},
+                    "currency":       {"type": ["string", "null"], "enum": ["USD", "CAD", "EUR", "GBP", "null"]},
+                    "vendor":         {"type": ["string", "null"]},
+                    "vendor_address": {"type": ["string", "null"]},
+                    "vendor_tax_id":  {"type": ["string", "null"]},
+                    "customer_name":  {"type": ["string", "null"]},
+                    "due_date":       {"type": ["string", "null"]},
+                    "payment_method": {"type": ["string", "null"]},
+                    "subtotal":       {"type": ["number", "null"]},
+                    "tax_amount":     {"type": ["number", "null"]},
+                    "line_items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "description": {"type": "string"},
+                                "quantity":    {"type": ["number", "null"]},
+                                "unit_price":  {"type": ["number", "null"]},
+                                "total_price": {"type": ["number", "null"]},
+                            },
+                            "additionalProperties": False
+                        },
+                    },
+                },
+                "required": ["total_amount", "currency"],
+                "additionalProperties": False
+            }
+
+            prompt = (
+                "Extract the invoice details from the OCR text below into a JSON object.\n"
+                "- Return ONLY a JSON object matching the schema. If missing, use null. Do NOT hallucinate.\n"
+                "\nCRITICAL FIELD RULES:\n"
+                "1. Document Type: Usually the title (e.g. 'Invoice', 'Receipt').\n"
+                "2. Invoice Number: Often labeled 'Invoice No', 'Meld #', 'Ref #', or a standalone string at top right.\n"
+                "3. Vendor: The billing company issuing the invoice (often largest text at top, or labeled 'From').\n"
+                "4. Customer Name: The billed party receiving the invoice (often labeled 'Bill To', or the secondary company).\n"
+                "5. Date: The primary format is YYYY-MM-DD. (e.g. 'Invoice date' vs 'Ticket Completed').\n"
+                "6. Subtotal & Tax: Only extract if explicitly listed. Do NOT duplicate 'Total' into 'Subtotal' if there's no tax.\n"
+                "7. Line Items: Extract FULL descriptions accurately. Do not mistake '50ml' or '3M' for Quantity. Ensure total_price = quantity * unit_price.\n\n"
+                "Text format may be chaotic. Connect values logically.\n\n"
+                f"{hint_str}Text:\n\n{ctx}"
+            )
+
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                l_resp = await client.post(
+                    LLAMA_CPP_API_URL,
+                    json={
+                        "model": "LFM2-1.2B-Extract-Q8_0",
+                        "messages": [
+                            {"role": "system", "content": "You are a precise JSON extraction AI. You excel at interpreting messy semantic OCR text, recognizing ambiguous headers (like 'Meld #' as invoice number), and strictly following the provided schema without hallucinating."},
+                            {"role": "user",   "content": prompt},
+                        ],
+                        "temperature": 0.0,
+                        "max_tokens": 8000,
+                        "response_format": {"type": "json_object", "schema": schema_obj},
+                    },
+                )
+                if l_resp.status_code != 200:
+                    raise Exception(f"LLM failed: {l_resp.text}")
+
+                content_str    = l_resp.json()["choices"][0]["message"]["content"]
+                structured_data = extract_json_from_llm(content_str)
+
+            struct_time = time.time() - start_struct
+
+            struct_path = OUTPUT_DIR / "structure" / f"{Path(filename).stem}_{task_id[:8]}.json"
+            struct_path.write_text(json.dumps(structured_data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+            db.structured_data.update_one(
+                {"file_id": file_id},
+                {"$set": {
+                    "structured_json": structured_data,
+                    "structuring_time": struct_time,
+                    "local_json_path": str(struct_path),
+                }},
+                upsert=True,
+            )
+            tasks_col.update_one({"_id": task_id}, {
+                "$set": {
+                    "status": "completed",
+                    "structuring_time": struct_time,
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            })
 
     except Exception as e:
-        logger.exception(f"[task {task_id}] error: {e}")
-        await _task_set(task_id, status=TaskStatus.ERROR, error=str(e))
+        logger.error(f"Task {task_id} failed: {e}")
+        import traceback; traceback.print_exc()
+        await update_task_status(task_id, "error", str(e))
 
-
-@app.post(
-    "/task/send",
-    tags=["Tasks"],
-    summary="Enqueue background task",
-    description="Creates a task that runs extraction and structuring.",
-    response_model=TaskSendResponse,
-)
-async def task_send(payload: TaskSendPayload = Body(
-    ...,
-    examples={
-        "basic": {
-            "summary": "Run extraction and structuring",
-            "value": {"file_id": "64f1c0f1a4e2f3d6c0a1b2c3", "force_ocr": False, "do_structure": True}
-        }
-    }
-)):
-    file_obj_id, file_doc = await _get_file_doc_or_404(payload.file_id)
-    filename_full = file_doc.get("filename", "") or ""
-    filename = Path(filename_full).stem
-
-    task_doc = {
-        "file_id": file_obj_id,
-        "filename": filename,           
-        "force_ocr": payload.force_ocr,
-        "do_structure": payload.do_structure,
-        "client_token": payload.client_token,
-        "status": TaskStatus.QUEUED,
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow(),
-    }
-    ins = await tasks_col.insert_one(task_doc)
-
-    asyncio.create_task(_run_task(ins.inserted_id))
-
-    return {"task_id": str(ins.inserted_id), "status": TaskStatus.QUEUED}
-
-
-@app.get(
-    "/task/state/{task_id}",
-    tags=["Tasks"],
-    summary="Get task state",
-    response_model=TaskStateResponse,
-    responses={404: {"model": ErrorResponse}}
-)
-async def task_state(task_id: str):
-    try:
-        tid = ObjectId(task_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid task ID")
-    t = await tasks_col.find_one({"_id": tid})
-    if not t:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return {
-        "task_id": task_id,
-        "status": t.get("status"),
-        "error": t.get("error"),
-        "file_id": str(t.get("file_id")) if t.get("file_id") else None,
-        "extraction_id": str(t.get("extraction_id")) if t.get("extraction_id") else None,
-        "structured_id": str(t.get("structured_id")) if t.get("structured_id") else None,
-        "updated_at": fmt(t.get("updated_at")),
-    }
-
-
-@app.get(
-    "/task/text/{task_id}",
-    tags=["Tasks"],
-    summary="Get extracted text/markdown",
-    response_model=TaskTextResponse,
-    responses={404: {"model": ErrorResponse}}
-)
-async def task_text(task_id: str):
-    try:
-        tid = ObjectId(task_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid task ID")
-    t = await tasks_col.find_one({"_id": tid})
-    if not t:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    file_id = t.get("file_id")
-    if not file_id:
-        raise HTTPException(status_code=404, detail="No file associated to task")
-
-    ex = await db.extractions.find_one({"file_id": file_id})
-    if not ex:
-        raise HTTPException(status_code=404, detail="Extraction not available yet")
-
-    return {
-        "file_id": str(file_id),
-        "content": ex["extraction_data"]["content"],
-        "images_count": ex["extraction_data"].get("images_count", 0),
-        "extraction_mode": ex["extraction_data"].get("extraction_mode"),
-    }
-
-
-@app.get(
-    "/task/data/{task_id}",
-    tags=["Tasks"],
-    summary="Get structured invoice JSON",
-    response_model=TaskDataResponse,
-    responses={404: {"model": ErrorResponse}}
-)
-async def task_data(task_id: str):
-    try:
-        tid = ObjectId(task_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid task ID")
-    t = await tasks_col.find_one({"_id": tid})
-    if not t:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    file_id = t.get("file_id")
-    if not file_id:
-        raise HTTPException(status_code=404, detail="No file associated to task")
-
-    s = await db.structured_data.find_one({"file_id": file_id})
-    if not s:
-        raise HTTPException(status_code=404, detail="Structured data not available yet")
-    return {"file_id": str(file_id), "data": s["structured_json"]}
-
-
-@app.get(
-    "/task/list",
-    tags=["Tasks"],
-    summary="List recent tasks",
-    response_model=TaskListResponse
-)
-async def task_list(limit: int = Query(20, ge=1, description="Max items to return")):
-    cur = tasks_col.find({}).sort("created_at", -1).limit(min(max(limit, 1), 100))
-    tasks: List[Dict[str, Any]] = []
-    async for t in cur:
-        fid = t.get("file_id")
-        file_doc = await db.fs.files.find_one({"_id": fid}) if fid else None
-
-        if fid and not file_doc:
-            await tasks_col.delete_one({"_id": t["_id"]})
-            continue
-
+@app.get("/task/list")
+async def list_tasks(limit: int = 100):
+    tasks = []
+    for t in tasks_col.find().sort("created_at", -1).limit(limit):
+        file_id = t.get("file_id")
+        # Fetch filename from files collection
+        file_doc = files_col.find_one({"_id": file_id}, {"filename": 1}) if file_id else None
+        filename = file_doc.get("filename", "") if file_doc else ""
         tasks.append({
-            "task_id": str(t["_id"]),
-            "status": t.get("status"),
-            "file_id": str(fid) if fid else None,
-            "filename": t.get("filename", "") or (file_doc or {}).get("filename", ""),
-            "extraction_id": str(t.get("extraction_id")) if t.get("extraction_id") else None,
-            "structured_id": str(t.get("structured_id")) if t.get("structured_id") else None,
-            "created_at": fmt(t.get("created_at")),
-            "updated_at": fmt(t.get("updated_at")),
-            "client_token": t.get("client_token"),
+            "task_id":          str(t["_id"]),
+            "status":           t.get("status"),
+            "file_id":          file_id,
+            "filename":         filename,
+            "engine":           t.get("engine"),
+            "created_at":       t.get("created_at"),
+            "updated_at":       t.get("updated_at"),
+            "processing_time":  t.get("processing_time"),
+            "structuring_time": t.get("structuring_time"),
+            "error":            t.get("error"),
         })
     return {"tasks": tasks}
 
+# ---------------------------------------------------------------------------
+# Task state / data
+# ---------------------------------------------------------------------------
 
-@app.post(
-    "/task/validate/{task_id}",
-    tags=["Tasks"],
-    summary="Mark task as validated",
-    response_model=TaskStateResponse,
-    responses={404: {"model": ErrorResponse}}
-)
-async def task_validate(task_id: str):
-    try:
-        tid = ObjectId(task_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid task ID")
-
-    t = await tasks_col.find_one({"_id": tid})
-    if not t:
+@app.get("/task/state/{task_id}")
+async def get_task_state(task_id: str):
+    task = tasks_col.find_one({"_id": task_id})
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-
-    await _task_set(
-        tid,
-        status=TaskStatus.VALIDATED,
-        validated_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
-    )
-    t = await tasks_col.find_one({"_id": tid})
     return {
-        "task_id": str(t["_id"]),
-        "status": t.get("status"),
-        "error": t.get("error"),
-        "file_id": str(t.get("file_id")) if t.get("file_id") else None,
-        "extraction_id": str(t.get("extraction_id")) if t.get("extraction_id") else None,
-        "structured_id": str(t.get("structured_id")) if t.get("structured_id") else None,
-        "updated_at": fmt(t.get("updated_at")),
+        "task_id": str(task["_id"]),
+        "status": task.get("status"),
+        "file_id": task.get("file_id"),
+        "engine": task.get("engine"),
+        "created_at": task.get("created_at"),
+        "updated_at": task.get("updated_at"),
+        "processing_time": task.get("processing_time"),
+        "structuring_time": task.get("structuring_time"),
+        "error": task.get("error"),
     }
 
+@app.get("/task/data/{task_id}")
+async def get_task_data(task_id: str):
+    task = tasks_col.find_one({"_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
 
-@app.delete(
-    "/files/{file_id}",
-    status_code=204,
-    tags=["Files"],
-    summary="Delete file and related data",
-    description="Hard-deletes GridFS file, tasks, extractions, and structured data.",
-    responses={404: {"model": ErrorResponse}, 204: {"description": "Deleted"}},
-)
-async def delete_file(file_id: str):
-    try:
-        oid = to_oid(file_id)
-        file_doc = await db.fs.files.find_one({"_id": oid})
-        if not file_doc:
-            raise HTTPException(status_code=404, detail="File not found")
+    file_id = task.get("file_id")
+    struct  = db.structured_data.find_one({"file_id": file_id}) if file_id else None
+    ext     = db.extractions.find_one({"file_id": file_id}) if file_id else None
 
-        await fs.delete(oid)
+    return {
+        "task_id":          str(task["_id"]),
+        "status":           task.get("status"),
+        "ocr_time":         task.get("processing_time"),
+        "structuring_time": task.get("structuring_time"),
+        "data":             struct.get("structured_json") if struct else None,
+        "ocr_content":      ext.get("result", {}).get("content", "") if ext else "",
+    }
 
-        ex_oid = await db.extractions.delete_many({"file_id": oid})
-        ex_str = await db.extractions.delete_many({"file_id": file_id})
+# ---------------------------------------------------------------------------
+# Raw file serving
+# ---------------------------------------------------------------------------
 
-        sd_oid = await db.structured_data.delete_many({"file_id": oid})
-        sd_str = await db.structured_data.delete_many({"file_id": file_id})
+from fastapi.responses import Response
 
-        tk_oid = await tasks_col.delete_many({"file_id": oid})
-        tk_str = await tasks_col.delete_many({"file_id": file_id})
+@app.get("/files/raw/{file_id}")
+async def get_raw_file(file_id: str):
+    fs = gridfs.GridFS(db)
+    if not fs.exists(_id=file_id):
+        raise HTTPException(status_code=404, detail="File not found")
+    grid_out = fs.get(file_id)
+    content  = grid_out.read()
+    filename = grid_out.filename or "file"
+    ext      = Path(filename).suffix.lower()
+    mime_map = {
+        ".pdf":  "application/pdf",
+        ".png":  "image/png",
+        ".jpg":  "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".tiff": "image/tiff",
+        ".tif":  "image/tiff",
+        ".bmp":  "image/bmp",
+        ".gif":  "image/gif",
+        ".webp": "image/webp",
+    }
+    mime = mime_map.get(ext, "application/octet-stream")
+    return Response(content=content, media_type=mime,
+                    headers={"Content-Disposition": f"inline; filename=\"{filename}\""})
 
-        pd = await db.processed_data.delete_many({"original_file_id": file_id})
+# ---------------------------------------------------------------------------
+# OCR extraction retrieval
+# ---------------------------------------------------------------------------
 
-        logger.info(
-            "DELETE %s -> tasks(oid:%d,str:%d) extr(oid:%d,str:%d) struct(oid:%d,str:%d) legacy:%d",
-            file_id, tk_oid.deleted_count, tk_str.deleted_count,
-            ex_oid.deleted_count, ex_str.deleted_count,
-            sd_oid.deleted_count, sd_str.deleted_count,
-            pd.deleted_count
-        )
-        return
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("DELETE ERROR")
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/extraction/{file_id}")
+async def get_extraction(file_id: str):
+    ext = db.extractions.find_one({"file_id": file_id})
+    if not ext:
+        raise HTTPException(status_code=404, detail="No extraction found for this file")
+    result = ext.get("result", {})
+    return {
+        "extraction": {
+            "content":         result.get("content", ""),
+            "engine":          ext.get("engine"),
+            "extraction_data": {
+                "processing_time": ext.get("processing_time"),
+            },
+        }
+    }
 
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-    openapi_schema = get_openapi(
-        title=app.title,
-        version=app.version,
-        description=app.description,
-        routes=app.routes,
-        tags=OPENAPI_TAGS,
+# ---------------------------------------------------------------------------
+# Update structured data (validate edits)
+# ---------------------------------------------------------------------------
+
+@app.put("/update/{file_id}")
+async def update_structured(file_id: str, payload: dict = Body(...)):
+    db.structured_data.update_one(
+        {"file_id": file_id},
+        {"$set": {"structured_json": payload, "validated": True, "validated_at": datetime.utcnow().isoformat()}},
+        upsert=True,
     )
-    openapi_schema["servers"] = [
-        {"url": "http://localhost:8000", "description": "Local"},
-    ]
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
+    # Also mark the task as validated
+    tasks_col.update_one(
+        {"file_id": file_id},
+        {"$set": {"status": "validated", "updated_at": datetime.utcnow().isoformat()}},
+        sort=[("created_at", -1)],
+    )
+    return {"status": "updated", "file_id": file_id}
 
-app.openapi = custom_openapi
+# ---------------------------------------------------------------------------
+# Task validation
+# ---------------------------------------------------------------------------
 
-@app.get("/openapi.yaml", include_in_schema=False)
-def openapi_yaml():
-    import yaml
-    return Response(yaml.safe_dump(app.openapi()), media_type="application/yaml")
+@app.post("/task/validate/{task_id}")
+async def validate_task(task_id: str):
+    task = tasks_col.find_one({"_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    tasks_col.update_one(
+        {"_id": task_id},
+        {"$set": {"status": "validated", "updated_at": datetime.utcnow().isoformat()}}
+    )
+    return {"status": "validated", "task_id": task_id}
+
+# ---------------------------------------------------------------------------
+# System cleanup
+# ---------------------------------------------------------------------------
+
+@app.post("/system/cleanup")
+async def system_cleanup():
+    fs = gridfs.GridFS(db)
+    for f in db.fs.files.find():
+        try:
+            fs.delete(f["_id"])
+        except Exception:
+            pass
+    files_col.delete_many({})
+    tasks_col.delete_many({})
+    db.extractions.delete_many({})
+    db.structured_data.delete_many({})
+    db.ocr_data.delete_many({})
+    return {"status": "cleaned"}
 

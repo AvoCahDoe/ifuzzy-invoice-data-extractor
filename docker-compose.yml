@@ -1,59 +1,117 @@
 services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: uvicorn main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - HOST=0.0.0.0
+      # URLs:
+      - MINERU_SERVICE_URL=http://mineru_service:8002
+      - MARKER_SERVICE_URL=http://marker_service:8004
+      - RAPIDOCR_SERVICE_URL=http://rapidocr_service:8005
+      - LLAMA_CPP_HOST=http://llamacpp:8080/v1
+      - MONGODB_URI=mongodb://mongodb:27017
+      - CORS_ALLOW_ORIGINS=http://localhost:4001
+    depends_on:
+      - mineru_service
+      - marker_service
+      - rapidocr_service
+      - llamacpp
+      - mongodb
+    volumes:
+      - ./processed_output:/app/processed_output
+    networks:
+      - invoice-net
+
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      - API_BASE_URL=http://backend:8000
+      - API_BASE_URL=http://backend:8001
       - PORT=4000
-      - NODE_ENV=production
-    depends_on: [backend]
-    ports: ["4000:4000"]
-    networks: [appnet]
+    depends_on:
+      - backend
+    ports:
+      - "4001:4000"
+    networks:
+      - invoice-net
 
-  backend:
+  mineru_service:
     build:
-      context: ./backend
+      context: ./mineru_service
       dockerfile: Dockerfile
     environment:
-      - HOST=0.0.0.0
-      - PORT=8000
-      - MONGODB_URI=mongodb://mongodb:27017
-      - OLLAMA_HOST=http://ollama:11434
-      - CORS_ALLOW_ORIGINS=http://localhost:4000
-      - TORCH_DEVICE=cpu
-    depends_on: [mongodb, ollama]
-    ports: ["8000:8000"]
-    networks: [appnet]
+      - PORT=8002
+    ports:
+      - "8002:8002"
+    volumes:
+      - mineru_cache:/root/.cache
+    networks:
+      - invoice-net
+
+  marker_service:
+    build:
+      context: ./marker_service
+      dockerfile: Dockerfile
+    environment:
+      - PORT=8004
+    ports:
+      - "8004:8004"
+    volumes:
+      - marker_cache:/root/.cache
+    networks:
+      - invoice-net
+
+  rapidocr_service:
+    build:
+      context: ./rapidocr_service
+      dockerfile: Dockerfile
+    environment:
+      - PORT=8005
+    ports:
+      - "8005:8005"
+    volumes:
+      - rapidocr_cache:/root/.cache
+    networks:
+      - invoice-net
+
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    ports:
+      - "8003:8080"
+    volumes:
+      - ./models:/models
+    # Command to run llama-server with CPU optimization (default behavior)
+    # We mount /models. Assuming model file exists there.
+    # If using 'ollama' models, we need to export them to GGUF or download GGUF.
+    # Previous project used start_llama.sh. I'll use a direct command here for simplicity if model is known.
+    # Or reuse the script if I copy it.
+    # Let's assume we download a small model or use one present.
+    # For now, I'll use the same entrypoint script approach and assume I'll copy 'models' folder.
+    entrypoint: ["/bin/sh", "/models/start_llama.sh"]
+    networks:
+      - invoice-net
 
   mongodb:
     image: mongo:6
     restart: unless-stopped
-    environment:
-      - MONGO_INITDB_DATABASE=fileuploads
+    ports:
+      - "27018:27017" # mapped to 27018 on host to avoid conflict with default
     volumes:
       - mongo_data:/data/db
-    ports: ["27017:27017"]
-    networks: [appnet]
-
-
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    ports: ["11434:11434"]   
-    volumes:
-      - ollama_models:/root/.ollama
-    networks: [appnet]
-    entrypoint: ["/bin/sh","-lc"]
-    command: >
-      "ollama serve &
-       until ollama list >/dev/null 2>&1; do sleep 1; done
-       ollama pull mistral &&
-       wait"
+    networks:
+      - invoice-net
 
 networks:
-  appnet:
+  invoice-net:
 
 volumes:
   mongo_data:
-  ollama_models:
+  marker_cache:
+  mineru_cache:
+  rapidocr_cache:

@@ -1,13 +1,14 @@
 import {
   Component,
   OnInit,
+  OnDestroy,
   Inject,
   PLATFORM_ID,
   NgZone,
   ChangeDetectorRef,
   ApplicationRef,
 } from '@angular/core';
-import { CommonModule, isPlatformBrowser } from '@angular/common';
+import { CommonModule, isPlatformBrowser, DOCUMENT } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -21,7 +22,7 @@ import { DomSanitizer, SafeResourceUrl, SafeUrl } from '@angular/platform-browse
   templateUrl: './validate.component.html',
   styleUrl: './validate.component.css',
 })
-export class ValidatePage implements OnInit {
+export class ValidatePage implements OnInit, OnDestroy {
   taskId = '';
   fileId = '';
 
@@ -33,16 +34,28 @@ export class ValidatePage implements OnInit {
 
   dataLoading = false;
   previewLoading = false;
+  pollingId: any;
+
+  // Tabs
+  activeTab: 'input' | 'raw' | 'structured' = 'structured'; // Default to structured result as before
+  markdownContent: string = '';
+  ocrTime: number | null = null;
+  structuringTime: number | null = null;
 
   extracted: any = {
     document_type: '',
-    currency: '',
-    payment_method: '',
     invoice_number: '',
-    invoice_date: '',
+    date: '',
+    vendor: '',
+    vendor_address: '',
+    vendor_tax_id: '',
+    customer_name: '',
     due_date: '',
+    payment_method: '',
     total_amount: '',
+    subtotal: '',
     tax_amount: '',
+    currency: '',
     line_items: [] as any[],
   };
 
@@ -52,12 +65,17 @@ export class ValidatePage implements OnInit {
     private sanitizer: DomSanitizer,
     private router: Router,
     @Inject(PLATFORM_ID) private platformId: Object,
+    @Inject(DOCUMENT) private document: Document,
     private appRef: ApplicationRef,  
     private zone: NgZone,
     private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
+    // Expand to full viewport width for the 3-column layout
+    if (isPlatformBrowser(this.platformId)) {
+      this.document.getElementById('app-main')?.classList.add('full-bleed');
+    }
     
     this.route.paramMap.subscribe(async (pm) => {
       const t = pm?.get('taskId') ?? '';
@@ -76,6 +94,11 @@ export class ValidatePage implements OnInit {
         this.cdr.detectChanges();
       }
 
+      // Start polling for updates (e.g. if still structuring)
+      if (isPlatformBrowser(this.platformId)) {
+          this.pollingId = setInterval(() => this.loadAndPopulateData(), 2000);
+      }
+
       if (isPlatformBrowser(this.platformId)) {
         const rawUrl = this.api.fileRawUrl(this.fileId);
         const assumedPdf = /\.pdf($|\?)/i.test(rawUrl);
@@ -92,17 +115,42 @@ export class ValidatePage implements OnInit {
     });
   }
 
+  ngOnDestroy(): void {
+      if (this.pollingId) clearInterval(this.pollingId);
+      // Restore normal container width for other pages
+      if (isPlatformBrowser(this.platformId)) {
+        this.document.getElementById('app-main')?.classList.remove('full-bleed');
+      }
+  }
+
   private async loadAndPopulateData() {
     let data: any | null = null;
 
     try {
       const res = await firstValueFrom(this.api.getTaskData(this.taskId));
       data = res?.data ?? null;
+      this.ocrTime = res?.ocr_time ?? null;
+      this.structuringTime = res?.structuring_time ?? null;
+      // The new /task/data endpoint returns ocr_content directly
+      if (res?.ocr_content) {
+        this.markdownContent = res.ocr_content;
+      }
     } catch { /* ignore */ }
 
-    if (!data) {
-      const ext = await firstValueFrom(this.api.getExtraction(this.fileId));
-      data = ext?.extraction?.extraction_data ?? null;
+    // Fallback: try /extraction/{fileId} for OCR content if not already loaded
+    if (!this.markdownContent) {
+      try {
+        const ext = await firstValueFrom(this.api.getExtraction(this.fileId));
+        if (ext?.extraction?.content) {
+          this.markdownContent = ext.extraction.content;
+        }
+        if (!data) {
+          data = ext?.extraction?.extraction_data ?? null;
+        }
+        if (this.ocrTime === null) {
+          this.ocrTime = ext?.extraction?.extraction_data?.processing_time ?? null;
+        }
+      } catch { /* ignore */ }
     }
 
     this.zone.run(() => {
@@ -116,6 +164,7 @@ export class ValidatePage implements OnInit {
       this.appRef.tick(); 
     });
   }
+
 
   private async buildPreviewUrls(rawUrl: string, assumedPdf: boolean) {
     try {

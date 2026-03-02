@@ -14,6 +14,8 @@ type TaskRow = {
   created_at?: string;
   updated_at?: string;
   canValidate: boolean;
+  extra_time: number | null;
+  struct_time: number | null;
 };
 
 @Component({
@@ -36,7 +38,7 @@ export class StatusPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.load();
-    this.pollingId = setInterval(() => this.load(true), 5000);
+    this.pollingId = setInterval(() => this.load(true), 1000);
   }
   ngOnDestroy(): void { if (this.pollingId) clearInterval(this.pollingId); }
 
@@ -55,7 +57,9 @@ export class StatusPage implements OnInit, OnDestroy {
           status,
           created_at: t.created_at,
           updated_at: t.updated_at,
-          canValidate: status === 'done',
+          canValidate: status === 'done' || status === 'completed',
+          extra_time: t.processing_time ?? null, 
+          struct_time: t.structuring_time ?? null,
         };
       });
     } catch {
@@ -74,6 +78,8 @@ export class StatusPage implements OnInit, OnDestroy {
           created_at: f.upload_date,
           updated_at: processed ? f.processed_at : f.upload_date,
           canValidate: processed,
+          extra_time: null,
+          struct_time: null,
         } as TaskRow;
       });
     } finally {
@@ -98,9 +104,8 @@ export class StatusPage implements OnInit, OnDestroy {
     const taskId = row.task_id ?? `file-${row.file_id}`;
     this.router.navigate(['/validate', taskId, row.file_id],
     {
-      // either way works; I show both. Pick one and keep it consistent.
-      queryParams: { drawer: 'off' },            // OPTION A: query param
-      state: { drawerOpen: false }               // OPTION B: navigation state
+      queryParams: { drawer: 'off' },
+      state: { drawerOpen: false }
     });
   }
 
@@ -133,6 +138,20 @@ export class StatusPage implements OnInit, OnDestroy {
     }
   }
 
+  async onCleanup() {
+    const ok = confirm("ATTENTION : Supprimer TOUTE la base de données ?\nCette action supprimera tous les fichiers et toutes les extractions.");
+    if (!ok) return;
+
+    try {
+      await firstValueFrom(this.api.cleanupDatabase());
+      await this.load(false);
+      alert("Base de données nettoyée.");
+    } catch (e) {
+      console.error(e);
+      alert("Échec du nettoyage.");
+    }
+  }
+
   badgeClass(s: string) {
     const k = (s || '').toLowerCase();
     switch (k) {
@@ -140,6 +159,7 @@ export class StatusPage implements OnInit, OnDestroy {
       case 'extracting': return 'badge badge--extracting';
       case 'structuring': return 'badge badge--structuring';
       case 'done': return 'badge badge--done';
+      case 'completed': return 'badge badge--done';
       case 'validated': return 'badge badge--validated';   
       case 'error': return 'badge badge--error';
       default: return 'badge';

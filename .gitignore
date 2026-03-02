@@ -10,3 +10,15 @@ node_modules/
 dist/
 
 *.log
+
+# Ignore heavy local data
+dataset/
+processed_output/
+models/
+test_results/
+*.json
+*.jpg
+*.png
+test.txt
+test_dataset_image.py
+test_trigger.py

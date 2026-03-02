@@ -21,6 +21,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui, -apple
 .nav a.active, .nav a:hover { background: #eef5ff; color: var(--primary); }
 
 .container { padding: 18px; max-width: 1200px; margin: 0 auto; }
+.container.full-bleed { max-width: none !important; padding: 0 !important; }
 
 button {
   background-color: var(--primary);

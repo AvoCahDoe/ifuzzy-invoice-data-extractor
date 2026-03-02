@@ -16,6 +16,15 @@
     </label>
 
     <div class="upload-controls">
+      <div class="engine-select" style="margin-bottom: 1rem;">
+        <label style="margin-right: 0.5rem; color: #b0b0b0;">Engine:</label>
+        <select [(ngModel)]="selectedEngine" [disabled]="uploading" class="select" style="padding: 4px; border-radius: 4px; background: #333; color: white; border: 1px solid #555;">
+          <option value="rapidocr">RapidOCR (Default)</option>
+          <option value="mineru">MinerU (Layout-aware)</option>
+          <option value="marker">Marker (Robust)</option>
+        </select>
+      </div>
+
       <p *ngIf="selectedFile">{{ selectedFile.name }}</p>
 
       <div class="loading-container" *ngIf="uploading">

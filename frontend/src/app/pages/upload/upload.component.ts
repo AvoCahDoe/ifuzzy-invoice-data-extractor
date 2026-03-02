@@ -1,13 +1,14 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../services/api.service';
 
 @Component({
   selector: 'app-upload',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, FormsModule],
   templateUrl: './upload.component.html',
   styleUrl: './upload.component.css'
 })
@@ -16,6 +17,7 @@ export class UploadPage {
   uploading = false;
   showModal = false;
   lastFileId: string | null = null;
+  selectedEngine = 'rapidocr';
 
   constructor(private api: ApiService, private router: Router) {}
 
@@ -59,11 +61,11 @@ export class UploadPage {
       this.selectedFile = null;
       this.clearFileInput();
 
-      this.api.sendTask(fileId, false, true).subscribe({
+      this.api.sendTask(fileId, false, true, this.selectedEngine).subscribe({
         next: () => {
         },
         error: () => {
-          this.api.process(fileId, false).subscribe({
+          this.api.process(fileId, false, this.selectedEngine).subscribe({
             next: () => {
               this.api.structure(fileId).subscribe({
                 next: () => {},

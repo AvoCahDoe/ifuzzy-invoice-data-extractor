@@ -6,18 +6,18 @@ import { isPlatformServer } from '@angular/common';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  private base = 'http://backend:8000';
+  private base = 'http://backend:8001';
 
   constructor(private http: HttpClient) {
     const isBrowser = typeof window !== 'undefined';
 
     const browserBase = isBrowser
-      ? window.location.origin.replace(/:4000$/, ':8000')
+      ? window.location.origin.replace(/:4001$/, ':8001').replace(/:4000$/, ':8001')
       : null;
 
-    const ssrBase = (globalThis as any)?.process?.env?.API_BASE_URL || 'http://backend:8000';
+    const ssrBase = (globalThis as any)?.process?.env?.API_BASE_URL || 'http://backend:8001';
 
-    this.base = isBrowser ? (browserBase || 'http://localhost:8000') : ssrBase;
+    this.base = isBrowser ? (browserBase || 'http://localhost:8001') : ssrBase;
   }
 
   upload(file: File): Observable<{ file_id: string }> {
@@ -26,8 +26,10 @@ export class ApiService {
     return this.http.post<{ file_id: string }>(`${this.base}/upload`, form);
   }
 
-  process(fileId: string, force_ocr = false): Observable<any> {
-    const params = new HttpParams().set('force_ocr', String(force_ocr));
+  process(fileId: string, force_ocr = false, engine = 'mineru'): Observable<any> {
+    const params = new HttpParams()
+      .set('force_ocr', String(force_ocr))
+      .set('engine', engine);
     return this.http.post(`${this.base}/process/${fileId}`, {}, { params });
   }
 
@@ -49,8 +51,13 @@ export class ApiService {
     );
   }
 
-  sendTask(fileId: string, force_ocr = false, structure_after = true): Observable<{ task_id: string }> {
-    return this.http.post<{ task_id: string }>(`${this.base}/task/send`, { file_id: fileId, force_ocr, structure_after });
+  sendTask(fileId: string, force_ocr = false, structure_after = true, engine = 'mineru'): Observable<{ task_id: string }> {
+    return this.http.post<{ task_id: string }>(`${this.base}/task/send`, { 
+      file_id: fileId, 
+      force_ocr, 
+      do_structure: structure_after,
+      engine 
+    });
   }
 
   listTasks(limit = 100): Observable<any> {
@@ -81,5 +88,9 @@ export class ApiService {
   getFileBlob(fileId: string) {
     const url = this.fileRawUrl(fileId);
     return this.http.get(url, { responseType: 'blob' });
+  }
+
+  cleanupDatabase(): Observable<any> {
+    return this.http.post(`${this.base}/system/cleanup`, {});
   }
 }

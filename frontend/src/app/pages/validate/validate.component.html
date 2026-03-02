@@ -1,120 +1,101 @@
 <div class="validate-toolbar">
   <h2>Field Validation</h2>
-  <button class="btn outline" (click)="toggleDrawer()" aria-label="Toggle preview drawer">
-
-    <span *ngIf="!drawerOpen">
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-        <path d="M13 16L7 10L13 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg> 
-    </span>
-    <span *ngIf="drawerOpen">✖</span>
-  </button>
 </div>
 
-<div class="two-col" [class.drawer-open]="drawerOpen">
-  <section class="extracted-fields">
-    <div class="loading-container" *ngIf="dataLoading">
-      <div class="spinner"></div>
-      <p class="loading-text">Loading data…</p>
+<div class="three-col">
+  <!-- Image/PDF Panel -->
+  <aside class="preview-drawer" style="border: 1px solid #ccc; box-shadow: 0 2px 6px rgba(0,0,0,.05); border-radius: 12px; background: #fff; display: flex; flex-direction: column; overflow: hidden;">
+    <div class="preview-header" style="background: #f8f9fa;">
+      <h3>Document Preview</h3>
     </div>
-
-    <div class="fields-grid" *ngIf="!dataLoading">
-      <div class="field">
-        <label>Document Type</label>
-        <input type="text" [(ngModel)]="extracted.document_type" />
-      </div>
-      <div class="field">
-        <label>Currency</label>
-        <input type="text" [(ngModel)]="extracted.currency" />
-      </div>
-      <div class="field">
-        <label>Payment Method</label>
-        <input type="text" [(ngModel)]="extracted.payment_method" />
-      </div>
-      <div class="field">
-        <label>Invoice Number</label>
-        <input type="text" [(ngModel)]="extracted.invoice_number" />
-      </div>
-      <div class="field">
-        <label>Date</label>
-        <input type="text" [(ngModel)]="extracted.invoice_date" />
-      </div>
-      <div class="field">
-        <label>Due Date</label>
-        <input type="text" [(ngModel)]="extracted.due_date" />
-      </div>
-      <div class="field">
-        <label>Total</label>
-        <input type="text" [(ngModel)]="extracted.total_amount" />
-      </div>
-      <div class="field">
-        <label>TVA</label>
-        <input type="text" [(ngModel)]="extracted.tax_amount" />
-      </div>
-    </div>
-
-    <div class="table-wrapper" *ngIf="!dataLoading && extracted.line_items?.length">
-      <table class="line-items-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Quantity</th>
-            <th>Unit Price</th>
-            <th>Packaging</th>
-            <th>Unit</th>
-            <th>Total (Excl. Tax)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let item of extracted.line_items; let i = index; trackBy: trackByIndex">
-            <td><input type="text" [(ngModel)]="item.name" /></td>
-            <td><input type="text" [(ngModel)]="item.quantity" /></td>
-            <td><input type="text" [(ngModel)]="item.unit_price" /></td>
-            <td><input type="text" [(ngModel)]="item.packaging" /></td>
-            <td><input type="text" [(ngModel)]="item.unit" /></td>
-            <td><input type="text" [(ngModel)]="item.total_ht" /></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="confirm-button-container" *ngIf="!dataLoading && (extracted?.invoice_date || extracted?.document_type)">
-      <button class="btn" (click)="confirm()">Confirm Information</button>
-    </div>
-  </section>
-
-  <aside class="preview-drawer" [class.open]="drawerOpen" aria-label="Preview">
-    <header class="preview-header">
-      <h3>Preview</h3>
-    </header>
-
-    <div class="preview-body">
+    <div class="preview-body" style="flex: 1; overflow-y: auto; padding: 1rem;">
       <div class="loading-container" *ngIf="previewLoading">
         <div class="spinner"></div>
-        <p class="loading-text">Loading preview…</p>
+        <p class="loading-text">Loading...</p>
       </div>
-
-      <img
-        *ngIf="!previewLoading && !isPdf && previewImgUrl"
-        [src]="previewImgUrl"
-        class="preview-media"
-        alt="Invoice preview" />
-
-
-      <object
-      *ngIf="drawerOpen && !previewLoading && isPdf && isBrowser && previewPdfUrl"
-      [data]="previewPdfUrl"
-      type="application/pdf"
-      class="preview-media">
-        <p class="preview-empty">
-          Unable to display the PDF preview.
-          <a [href]="previewPdfUrl" target="_blank" rel="noopener">Open in a new tab</a>.
-        </p>
+      <img *ngIf="!previewLoading && !isPdf && previewImgUrl" [src]="previewImgUrl" class="preview-media" alt="Invoice" />
+      <object *ngIf="!previewLoading && isPdf && isBrowser && previewPdfUrl" [data]="previewPdfUrl" type="application/pdf" class="preview-media" style="width: 100%; height: 80vh;">
+        <p>No PDF viewer available. <a [href]="previewPdfUrl" target="_blank">Download instead</a></p>
       </object>
-
-      <p *ngIf="!previewLoading && !previewImgUrl && !previewPdfUrl" class="preview-empty">
-        No preview available!
-      </p>
+      <p *ngIf="!previewLoading && !previewImgUrl && !previewPdfUrl" class="preview-empty">No preview available.</p>
     </div>
   </aside>
+
+  <!-- OCR Output Panel -->
+  <aside style="border: 1px solid #ccc; box-shadow: 0 2px 6px rgba(0,0,0,.05); border-radius: 12px; background: #fff; display: flex; flex-direction: column; overflow: hidden;">
+    <div class="preview-header" style="background: #f8f9fa;">
+      <h3>OCR Output (Mineru)</h3>
+    </div>
+    <div class="markdown-view" style="flex: 1; margin: 0; border: none; border-radius: 0; max-height: unset; overflow-y: auto;">
+      {{ markdownContent || 'No Markdown content available yet.' }}
+    </div>
+  </aside>
+
+  <!-- Structured Result Panel -->
+  <section class="extracted-fields" style="display: flex; flex-direction: column;">
+    <div class="preview-header" style="background: #fff; margin: -1.5rem -1.5rem 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid #eee;">
+      <h3>Structured Result</h3>
+    </div>
+    
+    <div style="flex: 1; overflow-y: auto;">
+        <div class="loading-container" *ngIf="dataLoading">
+          <div class="spinner"></div>
+          <p class="loading-text">Loading data…</p>
+        </div>
+
+        <div *ngIf="!dataLoading">
+            <div class="stats-bar" *ngIf="ocrTime !== null || structuringTime !== null">
+                <span *ngIf="ocrTime !== null" class="stat-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Extraction: <strong>{{ ocrTime | number:'1.2-2' }}s</strong>
+                </span>
+                <span *ngIf="structuringTime !== null" class="stat-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+                    Structuring: <strong>{{ structuringTime | number:'1.2-2' }}s</strong>
+                </span>
+            </div>
+
+            <div class="fields-grid">
+                <div class="field"><label>Document Type</label><input type="text" [(ngModel)]="extracted.document_type" /></div>
+                <div class="field"><label>Invoice Number</label><input type="text" [(ngModel)]="extracted.invoice_number" /></div>
+                <div class="field"><label>Date</label><input type="text" [(ngModel)]="extracted.date" /></div>
+                <div class="field"><label>Vendor</label><input type="text" [(ngModel)]="extracted.vendor" /></div>
+                <div class="field"><label>Vendor Address</label><input type="text" [(ngModel)]="extracted.vendor_address" /></div>
+                <div class="field"><label>Vendor Tax ID</label><input type="text" [(ngModel)]="extracted.vendor_tax_id" /></div>
+                <div class="field"><label>Customer Name</label><input type="text" [(ngModel)]="extracted.customer_name" /></div>
+                <div class="field"><label>Due Date</label><input type="text" [(ngModel)]="extracted.due_date" /></div>
+                <div class="field"><label>Payment Method</label><input type="text" [(ngModel)]="extracted.payment_method" /></div>
+                <div class="field"><label>Subtotal</label><input type="text" [(ngModel)]="extracted.subtotal" /></div>
+                <div class="field"><label>Tax Amount</label><input type="text" [(ngModel)]="extracted.tax_amount" /></div>
+                <div class="field"><label>Total</label><input type="text" [(ngModel)]="extracted.total_amount" /></div>
+                <div class="field"><label>Currency</label><input type="text" [(ngModel)]="extracted.currency" /></div>
+            </div>
+
+            <div class="table-wrapper" *ngIf="extracted.line_items?.length">
+            <table class="line-items-table">
+                <thead>
+                <tr>
+                    <th>Description</th>
+                    <th>Quantity</th>
+                    <th>Unit Price</th>
+                    <th>Total Price</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr *ngFor="let item of extracted.line_items; let i = index; trackBy: trackByIndex">
+                    <td><input type="text" [(ngModel)]="item.description" /></td>
+                    <td><input type="text" [(ngModel)]="item.quantity" /></td>
+                    <td><input type="text" [(ngModel)]="item.unit_price" /></td>
+                    <td><input type="text" [(ngModel)]="item.total_price" /></td>
+                </tr>
+                </tbody>
+            </table>
+            </div>
+
+            <div class="confirm-button-container" *ngIf="extracted?.date || extracted?.document_type">
+                <button class="btn" (click)="confirm()">Confirm Information</button>
+            </div>
+        </div>
+    </div>
+  </section>
 </div>

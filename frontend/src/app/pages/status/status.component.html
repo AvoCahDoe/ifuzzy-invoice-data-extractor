@@ -22,6 +22,7 @@
         </select>
 
         <button class="btn" (click)="refresh()">Refresh</button>
+        <button class="btn outline danger" (click)="onCleanup()">Clean Database</button>
       </div>
     </div>
 
@@ -32,6 +33,8 @@
             <th>Name</th>
             <th>Created</th>
             <th>Updated</th>
+            <th>Time (Extr.)</th>
+            <th>Time (Struct.)</th>
             <th>Status</th>
             <th>Action</th>
           </tr>
@@ -44,6 +47,14 @@
             </td>
             <td>{{ r.created_at }}</td>
             <td>{{ r.updated_at }}</td>
+            <td>
+              <span *ngIf="r.extra_time !== null">{{ r.extra_time | number:'1.2-2' }}s</span>
+              <span *ngIf="r.extra_time === null">-</span>
+            </td>
+            <td>
+              <span *ngIf="r.struct_time !== null">{{ r.struct_time | number:'1.2-2' }}s</span>
+              <span *ngIf="r.struct_time === null">-</span>
+            </td>
             <td>
               <span [ngClass]="badgeClass(r.status)">
                 <span class="badge-dot" *ngIf="r.status==='extracting' || r.status==='structuring'"></span>
