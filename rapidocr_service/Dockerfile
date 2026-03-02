@@ -1,5 +1,6 @@
 FROM python:3.10-slim
 
+LABEL org.opencontainers.image.source=https://github.com/AvoCahDoe/invoice-data-extractor
 WORKDIR /app
 
 # System deps: libGL for image processing
