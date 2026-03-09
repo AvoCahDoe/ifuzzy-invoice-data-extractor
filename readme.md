@@ -10,11 +10,12 @@ The system consists of several microservices orchestrated via Docker Compose:
 
 - **Frontend (`frontend/`)**: An Angular SSR application that provides a clean UI for uploading invoices and visualizing the extracted JSON side-by-side with the original document.
 - **Backend Orchestrator (`backend/`)**: A FastAPI service that manages the workflow: saving uploads, sending images to the OCR service, and formatting the prompt for the LLM.
-- **OCR Service (`rapidocr_service/`)**: A dedicated FastAPI wrapper around [RapidOCR](https://github.com/RapidAI/RapidOCR) and [RapidTable](https://github.com/RapidAI/RapidTable). It uses `PP_DOC_LAYOUTV3` to detect tables, processes them into Markdown pipe-tables, masks them, and runs full-page OCR on the remaining text to preserve horizontal line grouping.
-- **LLM Engine (`llamacpp`)**: Runs the `LFM2-1.2B-Extract-Q8_0.gguf` model using the official `llama.cpp` server, configured with an 8192 context window to easily handle long markdown invoice strings.
-- **Database (`mongodb`)**: Stores file metadata and extraction task statuses.
+- **OCR Service (`rapidocr_service/`)**: A high-performance FastAPI wrapper around [RapidOCR](https://github.com/RapidAI/RapidOCR) and [RapidTable](https://github.com/RapidAI/RapidTable). It uses `PP_DOC_LAYOUTV3` for advanced layout analysis, reconstructs tables into Markdown, and performs full-page OCR with spatial grouping to preserve document structure.
+- **LLM Engine (`llamacpp`)**: Orchestrates the `LFM2-1.2B-Extract-Q8_0.gguf` model using the `llama.cpp` server. Optimized with an 8192 context window to handle large document extractions with high precision.
+- **Database (`mongodb`)**: Persistent storage for file metadata, extraction tasks, and structured JSON results.
 
-_(Note: Legacy `marker_service` and `mineru_service` containers are also present but standard usage relies on the optimized ONNX RapidOCR pipeline)._
+> [!NOTE]
+> While `marker_service` and `mineru_service` are available as alternative engines, the system is primarily optimized for the ONNX-based RapidOCR pipeline.
 
 ## 🚀 Getting Started
 
