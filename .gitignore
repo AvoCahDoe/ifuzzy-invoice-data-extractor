@@ -14,8 +14,8 @@ dist/
 # Ignore heavy local data
 dataset/
 processed_output/
-models/
-!models/README.md
+models/*.gguf
+models/kv_cache/
 test_results/
 *.json
 *.jpg
