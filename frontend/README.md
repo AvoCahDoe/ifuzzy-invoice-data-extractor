@@ -1,59 +1,54 @@
-# Frontend
+# 💻 Invoice Data Extractor Frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.2.2.
+The frontend for the Invoice Data Extractor is a modern, high-performance web application built with **Angular 20** and **Angular SSR (Server-Side Rendering)**. It provides an intuitive interface for managing the entire invoice extraction lifecycle.
 
-## Development server
+## 🚀 Key Features
 
-To start a local development server, run:
+- **Drag-and-Drop Upload**: Simple interface for uploading single or batch invoices.
+- **Real-time Status Tracking**: Monitor extraction tasks through queued, extracting, and structuring states.
+- **Side-by-Side Visualization**: View the original invoice image alongside the extracted Markdown and structured JSON.
+- **Interactive Correction**: Built-in editor to manually validate and correct extracted fields.
+- **Confidence Scoring**: Visual indicators for extraction quality (Scoring: Visual OCR + LLM Semantic + Mathematical Logic).
+- **Responsive Design**: Optimized for both desktop and mobile viewing.
 
-```bash
-ng serve
-```
+## 🛠️ Tech Stack
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+- **Framework**: Angular v20
+- **Rendering**: Angular SSR (Server-Side Rendering) for fast initial loads.
+- **Styling**: Tailwind CSS (if applicable) / Custom CSS.
+- **State Management**: Reactive services with RxJS.
 
-## Code scaffolding
+## 🚀 Getting Started
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+### Prerequisites
 
-```bash
-ng generate component component-name
-```
+- [Node.js](https://nodejs.org/) (LTS recommended)
+- [Angular CLI](https://angular.dev/tools/cli)
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
+### Installation
 
 ```bash
-ng build
+npm install
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+### Development server
 
-## Running unit tests
+Run `npm start` (or `ng serve`) for a local dev server. Navigate to `http://localhost:4200/`. The app will automatically reload on changes.
 
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
+### Production Build
 
 ```bash
-ng test
+npm run build
 ```
 
-## Running end-to-end tests
+This compiles the project and optimizes it for performance, storing build artifacts in the `dist/` directory.
 
-For end-to-end (e2e) testing, run:
+## 🏗️ Architecture
 
-```bash
-ng e2e
-```
+- **`src/app/pages`**: Contains the main views (Upload, Status, Results).
+- **`src/app/services`**: Handles API communication with the Backend Orchestrator.
+- **`src/app/components`**: Reusable UI elements for data visualization and editing.
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+## 🏁 Configuration
 
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+The frontend connects to the backend API via the `API_BASE_URL` environment variable (configured for Docker) or defaults to `http://localhost:8001` in development.
