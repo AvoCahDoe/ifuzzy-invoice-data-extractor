@@ -1,152 +1,41 @@
-# MinerU Testing Setup
+# ⛏️ MinerU Service
 
-This directory contains a complete setup for testing MinerU, an open-source PDF extraction tool.
+The MinerU service is a powerful alternative OCR and PDF extraction engine. It is integrated into the microservice architecture as a fallback engine, optimized for extracting complex layouts and tables from academic and technical documents.
 
-## ✅ Installation Status
+## 🚀 Key Features
 
-MinerU has been successfully installed and configured for **CPU-only** mode on Windows.
+- **Layout Analysis**: Uses YOLO-based models for precise region detection.
+- **Table Extraction**: Recovers table structures and outputs them as both Markdown and structured JSON.
+- **CPU Optimized**: Configured to run in "pipeline" mode for efficient inference on CPU-only environments.
+- **Deep Extraction**: Capable of extracting text, tables, and images with high fidelity.
 
-## Directory Structure
+## 🛠️ API Endpoints
 
-```
-mineru_test/
-├── mineru_env/              # Python virtual environment with MinerU
-├── create_test_pdf.py       # Script to create test PDFs
-├── mineru_extractor.py      # Python wrapper for MinerU
-├── test_invoice.pdf         # Sample invoice PDF for testing
-├── output_dir/              # Output from MinerU extractions
-│   └── test_invoice/
-│       └── auto/
-│           ├── test_invoice.md           # Extracted markdown
-│           ├── test_invoice_content_list.json  # Structured content
-│           ├── images/                   # Extracted images
-│           └── ...
-└── README.md
-```
+The service runs on port `8002` by default.
 
-## Quick Start
+### `/convert` (POST)
 
-### 1. Activate the Virtual Environment
+Extracts markdown and structures from an uploaded document.
 
-```bash
-# Windows (CMD)
-mineru_env\Scripts\activate
+- **Parameters**:
+  - `file`: The document to process (`.pdf`, `.jpg`, `.png`).
+- **Response**: Returns the extracted markdown, images_count, and processing metadata.
 
-# Windows (Git Bash / PowerShell)
-source mineru_env/Scripts/activate
-```
+### `/health` (GET)
 
-### 2. Run MinerU on a PDF
+Returns the service status.
+
+## 🏗️ Technical Details
+
+- **Docker Integration**: The service is containerized and managed via Docker Compose.
+- **Model Cache**: Pre-trained model weights are cached in the `mineru_cache` volume to ensure fast cold-starts.
+- **Fallback Role**: In the main backend orchestrator, MinerU is triggered as a high-quality alternative if the primary RapidOCR engine fails to parse a document correctly.
+
+## 🧪 Development
+
+To run the service locally:
 
 ```bash
-# Using the CLI
-mineru -p your_document.pdf -o ./output --backend pipeline
-
-# Using the Python wrapper
-python mineru_extractor.py your_document.pdf
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8002 --reload
 ```
-
-### 3. Key Command Options
-
-| Option               | Description                                   |
-| -------------------- | --------------------------------------------- |
-| `-p`                 | Path to PDF file                              |
-| `-o`                 | Output directory                              |
-| `--backend pipeline` | **Required for CPU** - Uses lighter models    |
-| `--backend vlm`      | Uses Vision Language Models (GPU recommended) |
-
-## Configuration
-
-The MinerU configuration is stored at `C:\Users\wombi\mineru.json`:
-
-```json
-{
-  "device-mode": "cpu",
-  "models-dir": {
-    "pipeline": "C:\\Users\\wombi\\.cache\\huggingface\\hub\\models--opendatalab--PDF-Extract-Kit-1.0\\..."
-  }
-}
-```
-
-### Important Settings
-
-- **`device-mode`**: Set to `"cpu"` for CPU-only processing
-- **`models-dir`**: Points to downloaded model weights
-
-## Python API Usage
-
-```python
-from mineru_extractor import extract_pdf, get_tables_as_html
-
-# Extract content from a PDF
-result = extract_pdf("document.pdf")
-
-# Access extracted content
-print(result["markdown"])           # Full markdown text
-print(result["content_list"])       # Structured content with bboxes
-print(result["tables"])             # Extracted tables
-print(result["images"])             # List of image paths
-
-# Get tables as HTML
-tables = get_tables_as_html(result["content_list"])
-for table in tables:
-    print(table)
-```
-
-## Output Files
-
-MinerU generates several output files:
-
-| File                  | Description                                            |
-| --------------------- | ------------------------------------------------------ |
-| `*.md`                | Extracted content as Markdown                          |
-| `*_content_list.json` | Structured content with type, text, and bounding boxes |
-| `*_model.json`        | Raw model output                                       |
-| `*_layout.pdf`        | PDF with layout annotations                            |
-| `*_span.pdf`          | PDF with text spans highlighted                        |
-| `images/`             | Extracted images and table snapshots                   |
-
-## Performance Notes
-
-- **First run**: ~20-30 seconds to load models
-- **Subsequent runs**: 10-30 seconds per page (depending on complexity)
-- **Memory usage**: ~2-4 GB RAM
-
-## Troubleshooting
-
-### Model Download Issues
-
-If models fail to download, retry:
-
-```bash
-mineru-models-download
-# Select: huggingface → pipeline
-```
-
-### Out of Memory
-
-- Use `--backend pipeline` (not vlm)
-- Process fewer pages at a time
-- Close other applications
-
-### Missing libGL (Linux only)
-
-```bash
-sudo apt-get install -y libgl1 libglib2.0-0
-```
-
-## Comparison with Marker
-
-| Feature           | MinerU         | Marker             |
-| ----------------- | -------------- | ------------------ |
-| Table extraction  | ✅ HTML tables | ✅ Markdown tables |
-| Formula detection | ✅ LaTeX       | ✅ LaTeX           |
-| Layout analysis   | ✅ YOLO-based  | ✅ Surya-based     |
-| CPU performance   | Good           | Better             |
-| Output format     | MD + JSON      | MD + JSON          |
-
-## Links
-
-- [MinerU GitHub](https://github.com/opendatalab/MinerU)
-- [Documentation](https://mineru.readthedocs.io/)
-- [HuggingFace Models](https://huggingface.co/opendatalab/PDF-Extract-Kit-1.0)
