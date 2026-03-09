@@ -84,6 +84,10 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:server
     ports:
       - "8003:8080"
+      - "8031:8081"
+      - "8032:8082"
+      - "8033:8083"
+      - "8034:8084"
     volumes:
       - ./models:/models
     # Command to run llama-server with CPU optimization (default behavior)
