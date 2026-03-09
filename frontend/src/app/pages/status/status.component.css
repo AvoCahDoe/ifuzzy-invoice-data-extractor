@@ -92,11 +92,21 @@
 .table tbody tr:hover {
   background: #fafbff;
 }
-.name {
-  max-width: 520px;
+.name-cell {
+  max-width: 300px;
+}
+.main-text {
+  font-weight: 700;
+  color: #101828;
+  font-size: 14px;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
+}
+.sub-text {
+  font-size: 12px;
+  color: #667085;
+  margin-top: 2px;
 }
 .empty {
   text-align: center;
@@ -227,4 +237,54 @@
   background: #f6f9ff;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+/* Score Badges & Groups */
+.score-cell {
+  min-width: 120px;
+}
+.score-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.final-score {
+  font-weight: 800;
+  font-size: 15px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.sub-scores {
+  display: flex;
+  gap: 4px;
+}
+.sub-scores span {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  min-width: 24px;
+  text-align: center;
+}
+
+.score--high {
+  background: #e7f6ee;
+  color: #0f5132;
+  border: 1px solid #c7e9d6;
+}
+
+.score--mid {
+  background: #fff8eb;
+  color: #b25e09;
+  border: 1px solid #ffd6a5;
+}
+
+.score--low {
+  background: #feeceb;
+  color: #b42318;
+  border: 1px solid #f7c5c3;
 }

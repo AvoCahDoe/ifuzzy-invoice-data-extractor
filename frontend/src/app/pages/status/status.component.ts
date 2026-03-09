@@ -16,6 +16,13 @@ type TaskRow = {
   canValidate: boolean;
   extra_time: number | null;
   struct_time: number | null;
+  engine?: string;
+  precision?: string;
+  precisionName?: string;
+  confidence_score?: number;
+  score_viz?: number;
+  score_sem?: number;
+  score_log?: number;
 };
 
 @Component({
@@ -60,6 +67,13 @@ export class StatusPage implements OnInit, OnDestroy {
           canValidate: status === 'done' || status === 'completed',
           extra_time: t.processing_time ?? null, 
           struct_time: t.structuring_time ?? null,
+          engine: t.engine,
+          precision: t.precision,
+          precisionName: t.precision === '16' || t.precision === 'f16' ? 'F16' : (t.precision === '350m' ? '350M' : (t.precision ? t.precision + '-bit' : '')),
+          confidence_score: t.confidence_score,
+          score_viz: t.score_viz,
+          score_sem: t.score_sem,
+          score_log: t.score_log
         };
       });
     } catch {
@@ -164,6 +178,20 @@ export class StatusPage implements OnInit, OnDestroy {
       case 'error': return 'badge badge--error';
       default: return 'badge';
     }
+  }
+
+  scoreClass(val: number | undefined | null) {
+    if (val === undefined || val === null) return '';
+    const v = val <= 1 ? val * 100 : val;
+    if (v >= 90) return 'score--high';
+    if (v >= 70) return 'score--mid';
+    return 'score--low';
+  }
+
+  formatScore(val: number | undefined | null): string {
+    if (val === undefined || val === null) return '0';
+    const v = val <= 1 ? val * 100 : val;
+    return Math.round(v).toString();
   }
     
 }

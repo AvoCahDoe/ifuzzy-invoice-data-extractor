@@ -18,6 +18,8 @@ export class UploadPage {
   showModal = false;
   lastFileId: string | null = null;
   selectedEngine = 'rapidocr';
+  selectedPrecision = '8';
+  selectedRuns = 1;
 
   constructor(private api: ApiService, private router: Router) {}
 
@@ -61,7 +63,7 @@ export class UploadPage {
       this.selectedFile = null;
       this.clearFileInput();
 
-      this.api.sendTask(fileId, false, true, this.selectedEngine).subscribe({
+      this.api.sendTask(fileId, false, true, this.selectedEngine, this.selectedPrecision, this.selectedRuns).subscribe({
         next: () => {
         },
         error: () => {

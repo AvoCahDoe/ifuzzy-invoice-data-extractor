@@ -51,12 +51,14 @@ export class ApiService {
     );
   }
 
-  sendTask(fileId: string, force_ocr = false, structure_after = true, engine = 'mineru'): Observable<{ task_id: string }> {
+  sendTask(fileId: string, force_ocr = false, structure_after = true, engine = 'mineru', precision = '8', numRuns = 1): Observable<{ task_id: string }> {
     return this.http.post<{ task_id: string }>(`${this.base}/task/send`, { 
       file_id: fileId, 
       force_ocr, 
       do_structure: structure_after,
-      engine 
+      engine,
+      precision,
+      num_runs: numRuns
     });
   }
 

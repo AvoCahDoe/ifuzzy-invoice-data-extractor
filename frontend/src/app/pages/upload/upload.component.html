@@ -2,27 +2,93 @@
   <div class="upload-card">
     <h2>Attachments</h2>
 
-    <label for="file-upload" class="drop-area"
-           (dragover)="onDragOver($event)" (drop)="onDrop($event)">
-      <input id="file-upload" type="file" accept=".pdf,.png,.jpeg,.jpg"
-             hidden (change)="onFileChange($event)" />
+    <label
+      for="file-upload"
+      class="drop-area"
+      (dragover)="onDragOver($event)"
+      (drop)="onDrop($event)"
+    >
+      <input
+        id="file-upload"
+        type="file"
+        accept=".pdf,.png,.jpeg,.jpg"
+        hidden
+        (change)="onFileChange($event)"
+      />
 
       <div class="upload-instruction">
-        <p>Drop your invoice<br>(PDF, PNG or JPEG)</p>
+        <p>Drop your invoice<br />(PDF, PNG or JPEG)</p>
         <button type="button" (click)="triggerFileInput()" [disabled]="uploading">
-            Select a file
+          Select a file
         </button>
       </div>
     </label>
 
     <div class="upload-controls">
-      <div class="engine-select" style="margin-bottom: 1rem;">
-        <label style="margin-right: 0.5rem; color: #b0b0b0;">Engine:</label>
-        <select [(ngModel)]="selectedEngine" [disabled]="uploading" class="select" style="padding: 4px; border-radius: 4px; background: #333; color: white; border: 1px solid #555;">
-          <option value="rapidocr">RapidOCR (Default)</option>
-          <option value="mineru">MinerU (Layout-aware)</option>
-          <option value="marker">Marker (Robust)</option>
-        </select>
+      <div
+        class="engine-select"
+        style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center"
+      >
+        <div>
+          <label style="margin-right: 0.5rem; color: #b0b0b0">Engine:</label>
+          <select
+            [(ngModel)]="selectedEngine"
+            [disabled]="uploading"
+            class="select"
+            style="
+              padding: 4px;
+              border-radius: 4px;
+              background: #333;
+              color: white;
+              border: 1px solid #555;
+            "
+          >
+            <option value="rapidocr">RapidOCR</option>
+            <option value="mineru">MinerU</option>
+            <option value="marker">Marker</option>
+          </select>
+        </div>
+        <div>
+          <label style="margin-right: 0.5rem; color: #b0b0b0">Precision:</label>
+          <select
+            [(ngModel)]="selectedPrecision"
+            [disabled]="uploading"
+            class="select"
+            style="
+              padding: 4px;
+              border-radius: 4px;
+              background: #333;
+              color: white;
+              border: 1px solid #555;
+            "
+          >
+            <option value="4">4-bit (Fast)</option>
+            <option value="5">5-bit (Balanced)</option>
+            <option value="8">8-bit (High)</option>
+            <option value="16">F16 (Full)</option>
+            <option value="350m">350M (Efficient)</option>
+            <option value="all">Run All Models</option>
+          </select>
+        </div>
+        <div>
+          <label style="margin-right: 0.5rem; color: #b0b0b0">Runs:</label>
+          <select
+            [(ngModel)]="selectedRuns"
+            [disabled]="uploading"
+            class="select"
+            style="
+              padding: 4px;
+              border-radius: 4px;
+              background: #333;
+              color: white;
+              border: 1px solid #555;
+            "
+          >
+            <option [ngValue]="1">Single Run</option>
+            <option [ngValue]="2">Double Run (x2)</option>
+            <option [ngValue]="3">Triple Run (x3)</option>
+          </select>
+        </div>
       </div>
 
       <p *ngIf="selectedFile">{{ selectedFile.name }}</p>
@@ -40,7 +106,7 @@
     <div class="modal">
       <h3>Processing started</h3>
       <p>
-        Your document is being processed.<br>
+        Your document is being processed.<br />
         This may take a moment. You can track the status on the Status page.
       </p>
       <div class="modal-actions">

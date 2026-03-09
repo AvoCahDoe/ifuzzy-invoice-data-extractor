@@ -29,38 +29,60 @@
     <div class="table-wrap">
       <table class="table">
         <thead>
-          <tr>
-            <th>Name</th>
-            <th>Created</th>
-            <th>Updated</th>
-            <th>Time (Extr.)</th>
-            <th>Time (Struct.)</th>
+            <th>Invoice</th>
+            <th>Compute</th>
+            <th>Duration</th>
             <th>Status</th>
+            <th>Confidence</th>
             <th>Action</th>
-          </tr>
         </thead>
 
         <tbody>
           <tr *ngFor="let r of filtered">
-            <td class="name" [title]="r.filename || r.baseName || r.file_id">
-              {{ r.baseName || r.filename || r.file_id }}
+            <td class="name-cell">
+              <div class="main-text" [title]="r.filename || r.baseName || r.file_id">
+                {{ r.baseName || r.filename || r.file_id }}
+              </div>
+              <div class="sub-text">{{ r.created_at }}</div>
             </td>
-            <td>{{ r.created_at }}</td>
-            <td>{{ r.updated_at }}</td>
-            <td>
-              <span *ngIf="r.extra_time !== null">{{ r.extra_time | number:'1.2-2' }}s</span>
-              <span *ngIf="r.extra_time === null">-</span>
+            
+            <td class="compute-cell">
+              <div class="main-text" style="text-transform: capitalize;">{{ r.engine || '-' }}</div>
+              <div class="sub-text">{{ r.precisionName || '-' }}</div>
             </td>
-            <td>
-              <span *ngIf="r.struct_time !== null">{{ r.struct_time | number:'1.2-2' }}s</span>
-              <span *ngIf="r.struct_time === null">-</span>
+
+            <td class="time-cell">
+              <div class="main-text">
+                <span *ngIf="r.extra_time !== null">{{ r.extra_time | number:'1.1-1' }}s</span>
+                <span *ngIf="r.extra_time === null">-</span>
+              </div>
+              <div class="sub-text">
+                <span *ngIf="r.struct_time !== null">+ {{ r.struct_time | number:'1.1-1' }}s</span>
+                <span *ngIf="r.struct_time === null">+ 0s</span>
+              </div>
             </td>
+
             <td>
               <span [ngClass]="badgeClass(r.status)">
                 <span class="badge-dot" *ngIf="r.status==='extracting' || r.status==='structuring'"></span>
                 {{ r.status }}
               </span>
             </td>
+
+            <td class="score-cell">
+              <div *ngIf="r.confidence_score !== undefined" class="score-group">
+                <div class="final-score" [ngClass]="scoreClass(r.confidence_score)">
+                  {{ r.confidence_score }}%
+                </div>
+                <div class="sub-scores">
+                  <span [ngClass]="scoreClass(r.score_viz)" title="Visual">V{{ formatScore(r.score_viz) }}</span>
+                  <span [ngClass]="scoreClass(r.score_sem)" title="Semantic">S{{ formatScore(r.score_sem) }}</span>
+                  <span [ngClass]="scoreClass(r.score_log)" title="Logic">L{{ formatScore(r.score_log) }}</span>
+                </div>
+              </div>
+              <span *ngIf="r.confidence_score === undefined">-</span>
+            </td>
+
             <td class="action">
               <div class="actions">
                 <button
@@ -96,12 +118,10 @@
                 </button>
               </div>
             </td>
-
-
           </tr>
 
           <tr *ngIf="!filtered?.length">
-            <td colspan="5" class="empty">No tasks found.</td>
+            <td colspan="7" class="empty">No tasks found.</td>
           </tr>
         </tbody>
       </table>
