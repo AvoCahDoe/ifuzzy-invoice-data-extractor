@@ -1,6 +1,7 @@
 FROM python:3.10-slim
 
 LABEL org.opencontainers.image.source=https://github.com/AvoCahDoe/invoice-data-extractor
+LABEL org.opencontainers.image.description="Invoice Data Extractor Marker Microservice"
 WORKDIR /app
 
 # Install system dependencies

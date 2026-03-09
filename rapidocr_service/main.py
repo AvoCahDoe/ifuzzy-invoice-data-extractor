@@ -22,6 +22,7 @@ class HTMLTableToMarkdown(html.parser.HTMLParser):
         self.row_data = []
         self.in_cell = False
         self.is_header = False
+        self.separator_added = False
         self._current_cell_data = []
 
     def handle_starttag(self, tag, attrs):
@@ -50,11 +51,15 @@ class HTMLTableToMarkdown(html.parser.HTMLParser):
                 return
             row_str = "| " + " | ".join(self.row_data) + " |\n"
             self.markdown += row_str
-            # Add Markdown separator line after the header row
-            if self.is_header:
-                separator = "| " + " | ".join(["---"] * len(self.row_data)) + " |\n"
+            # Add Markdown separator line after the first row (header or first data row)
+            if not self.separator_added:
+                # Calculate number of columns based on row_data
+                cols = len(self.row_data)
+                separator = "| " + " | ".join(["---"] * cols) + " |\n"
                 self.markdown += separator
-                self.is_header = False
+                self.separator_added = True
+            
+            self.is_header = False
 
 
 def html_to_markdown(html_string: str) -> str:
@@ -67,6 +72,86 @@ def html_to_markdown(html_string: str) -> str:
     except Exception:
         return html_string
     return parser.markdown.strip()
+
+
+# ---------------------------------------------------------------------------
+# Direct Digital PDF Extraction (Fast Path)
+# ---------------------------------------------------------------------------
+
+def pdf_has_text(pdf_path: str) -> bool:
+    """Check if the PDF has embedded selectable text on any page."""
+    import fitz
+    try:
+        doc = fitz.open(pdf_path)
+        for page in doc:
+            text = page.get_text("text").strip()
+            # If we find at least 20 characters of embedded text, it's a digital PDF
+            if len(text) > 20: 
+                doc.close()
+                return True
+        doc.close()
+    except Exception as e:
+        print(f"pdf_has_text error: {e}")
+    return False
+
+def extract_text_from_pdf(pdf_path: str) -> str:
+    """Extract embedded text and tables directly using PyMuPDF (No OCR)."""
+    import fitz
+    doc = fitz.open(pdf_path)
+    all_sections = []
+    
+    for page_num, page in enumerate(doc):
+        if len(doc) > 1:
+            all_sections.append(f"\n---\n*Page {page_num + 1}*\n")
+            
+        page_sections = []
+        
+        # 1. Extract tables via PyMuPDF
+        tabs = page.find_tables()
+        table_bboxes = []
+        if tabs and tabs.tables:
+            for table in tabs.tables:
+                table_bboxes.append(table.bbox)
+                try:
+                    import pandas as pd
+                    import tabulate
+                    df = table.to_pandas()
+                    md = df.to_markdown(index=False)
+                except ImportError:
+                    print("[warning] pandas or tabulate not found; simple string conversion fallback used.")
+                    md = str(table.to_pandas())
+                if md and md.strip():
+                    page_sections.append(md)
+        
+        # 2. Extract regular text blocks, omitting those inside tables
+        blocks = page.get_text("blocks")
+        text_blocks = []
+        for b in blocks:
+            x0, y0, x1, y1, text, _, block_type = b
+            if block_type != 0: # 0 means text block
+                continue
+            
+            cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+            in_table = False
+            for t_bbox in table_bboxes:
+                tx0, ty0, tx1, ty1 = t_bbox
+                if tx0 <= cx <= tx1 and ty0 <= cy <= ty1:
+                    in_table = True
+                    break
+                    
+            if not in_table and text.strip():
+                text_blocks.append((y0, x0, text.strip()))
+                
+        # Sort top-to-bottom, then left-to-right
+        text_blocks.sort(key=lambda x: (x[0], x[1]))
+        
+        if text_blocks:
+            page_sections.append("\n\n".join([b[2] for b in text_blocks]))
+            
+        all_sections.extend(page_sections)
+        
+    doc.close()
+    return "\n\n".join(all_sections)
 
 
 # ---------------------------------------------------------------------------
@@ -90,56 +175,53 @@ def pdf_to_images(pdf_path: str, dpi: int = 200) -> list:
 # Core ONNX hybrid pipeline
 # ---------------------------------------------------------------------------
 
-def run_onnx_ocr(images: list) -> str:
+# Monkeypatch to fix rapid_table dependency missing rapidocr package
+import rapidocr_onnxruntime
+import sys
+sys.modules["rapidocr"] = rapidocr_onnxruntime
+
+from rapid_layout import RapidLayout, ModelType as LayoutModelType
+from rapid_table import ModelType, RapidTable, RapidTableInput
+from rapidocr_onnxruntime import RapidOCR
+import numpy as np
+
+# Global shared engines
+layout_engine = RapidLayout(model_type=LayoutModelType.PP_DOC_LAYOUTV3)
+ocr_engine = RapidOCR()
+table_engine = RapidTable(RapidTableInput(model_type=ModelType.PPSTRUCTURE_EN))
+
+# Wrapper to bridge API mismatch: rapid_table v3 expects an object with boxes/txts/scores
+# but rapidocr_onnxruntime v1.4.x returns a tuple (result_list, elapsed)
+class OcrWrapper:
+    def __init__(self, engine):
+        self.engine = engine
+    def __call__(self, img):
+        res = self.engine(img)
+        class OcrResObj: pass
+        obj = OcrResObj()
+        if not res or not res[0]:
+            obj.boxes = None
+            return obj
+        boxes, txts, scores = [], [], []
+        for item in res[0]:
+            if len(item) == 3:
+                boxes.append(item[0])
+                txts.append(item[1])
+                scores.append(item[2])
+        obj.boxes = np.array(boxes)
+        obj.txts = txts
+        obj.scores = scores
+        return obj
+
+table_engine.ocr_engine = OcrWrapper(ocr_engine)
+
+def run_onnx_ocr(images: list) -> tuple[str, list[float]]:
     """
     Hybrid ONNX pipeline per page using masking to prevent text duplication.
+    Returns (markdown_text, all_confidences)
     """
-    import numpy as np
-    import tempfile
-    import os
-    import sys
-
-    # Monkeypatch to fix rapid_table dependency missing rapidocr package
-    try:
-        import rapidocr_onnxruntime
-        sys.modules["rapidocr"] = rapidocr_onnxruntime
-    except ImportError:
-        pass
-
-    from rapid_layout import RapidLayout, ModelType as LayoutModelType
-    from rapid_table import ModelType, RapidTable, RapidTableInput
-    from rapidocr_onnxruntime import RapidOCR
-
-    layout_engine = RapidLayout(model_type=LayoutModelType.PP_DOC_LAYOUTV3)
-    ocr_engine = RapidOCR()
-    table_engine = RapidTable(RapidTableInput(model_type=ModelType.PPSTRUCTURE_EN))
-
-    # Wrapper to bridge API mismatch: rapid_table v3 expects an object with boxes/txts/scores
-    # but rapidocr_onnxruntime v1.4.x returns a tuple (result_list, elapsed)
-    class OcrWrapper:
-        def __init__(self, engine):
-            self.engine = engine
-        def __call__(self, img):
-            res = self.engine(img)
-            class OcrResObj: pass
-            obj = OcrResObj()
-            if not res or not res[0]:
-                obj.boxes = None
-                return obj
-            boxes, txts, scores = [], [], []
-            for item in res[0]:
-                if len(item) == 3:
-                    boxes.append(item[0])
-                    txts.append(item[1])
-                    scores.append(item[2])
-            obj.boxes = np.array(boxes)
-            obj.txts = txts
-            obj.scores = scores
-            return obj
-
-    table_engine.ocr_engine = OcrWrapper(ocr_engine)
-
     all_sections: list[str] = []
+    all_confidences: list[float] = []
 
     for page_num, pil_img in enumerate(images):
         if len(images) > 1:
@@ -151,12 +233,15 @@ def run_onnx_ocr(images: list) -> str:
         # ── 1. Layout detection ────────────────────────────────────────────
         layout_boxes = []      # [[x1,y1,x2,y2], ...]
         layout_classes = []    # ['table', 'text', ...]
+        layout_scores = []
 
         try:
             layout_out = layout_engine(img_array)
             if layout_out.boxes and layout_out.class_names:
                 layout_boxes = layout_out.boxes
                 layout_classes = layout_out.class_names
+                if hasattr(layout_out, "scores"):
+                    layout_scores = layout_out.scores
         except Exception as e:
             print(f"[layout] page {page_num + 1} failed: {e}")
 
@@ -164,133 +249,143 @@ def run_onnx_ocr(images: list) -> str:
         img_for_ocr = img_array.copy()
 
         if layout_boxes:
-            for bbox, cat in zip(layout_boxes, layout_classes):
+            for idx, (bbox, cat) in enumerate(zip(layout_boxes, layout_classes)):
                 if "table" in cat.lower():
                     x1, y1, x2, y2 = (int(v) for v in bbox[:4])
-                    # Ensure bounds are within image to avoid slicing errors
                     x1, y1 = max(0, x1), max(0, y1)
                     x2, y2 = min(img_array.shape[1], x2), min(img_array.shape[0], y2)
                     
-                    crop = pil_img.crop((x1, y1, x2, y2))
-                    
+                    if idx < len(layout_scores):
+                        all_confidences.append(float(layout_scores[idx]))
+
                     # Table Structure Recognition → Markdown pipe-table
                     try:
-                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                            crop.save(tmp.name, format="PNG")
-                            crop_path = tmp.name
-                        try:
-                            table_res = table_engine(crop_path)
-                            if table_res and hasattr(table_res, "pred_htmls") and table_res.pred_htmls:
-                                html_str = "".join(table_res.pred_htmls)
-                                md = html_to_markdown(html_str)
-                                if md.strip():
-                                    page_sections.append(md)
-                        finally:
-                            if os.path.exists(crop_path):
-                                os.unlink(crop_path)
+                        crop_array = img_array[y1:y2, x1:x2]
+                        table_res = table_engine(crop_array)
+                        
+                        if table_res and hasattr(table_res, "pred_htmls") and table_res.pred_htmls:
+                            html_str = "".join(table_res.pred_htmls)
+                            md = html_to_markdown(html_str)
+                            if md.strip():
+                                page_sections.append(md)
                     except Exception as e:
                         print(f"[table] region ({cat}) failed: {e}")
 
-                    # Mask out the table region in the OCR array with white pixels
                     img_for_ocr[y1:y2, x1:x2] = 255
 
         # ── 3. Full-page OCR on the remaining content ─────────────────────
         try:
             ocr_result = ocr_engine(img_for_ocr)
-            lines = _extract_ocr_lines(ocr_result)
+            lines, confs = _extract_ocr_lines(ocr_result)
             if lines:
                 page_sections.append("\n".join(lines))
+                all_confidences.extend(confs)
         except Exception as e:
             print(f"[ocr] page {page_num + 1} failed: {e}")
             import traceback; traceback.print_exc()
 
         all_sections.extend(page_sections)
 
-    return "\n\n".join(s for s in all_sections if s.strip())
+    return "\n\n".join(s for s in all_sections if s.strip()), all_confidences
 
 
-def _extract_ocr_lines(ocr_result, min_score: float = 0.4) -> list[str]:
+def _extract_ocr_lines(ocr_result, min_score: float = 0.4) -> tuple[list[str], list[float]]:
     """
-    Extract text lines from RapidOCR output utilizing bounding box clustering
-    to preserve horizontal relationships (keys to values).
-    
-    RapidOCR.__call__ returns: (result_list, elapsed)
-    Each item: [box_points, text_string, score_float]
-    box_points is 4 corners: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+    Robust line extraction using spatial clustering (vertical overlap) and
+    physical distance-based tab separation to preserve table column layout.
+    Returns (lines, confidences)
     """
     if ocr_result is None:
-        return []
-    # Unpack tuple
+        return [], []
     result_list = ocr_result[0] if isinstance(ocr_result, (list, tuple)) else ocr_result
     if not result_list:
-        return []
+        return [], []
 
     blocks = []
+    all_confs = []
     for item in result_list:
         if not isinstance(item, (list, tuple)) or len(item) < 2:
             continue
-        text = str(item[1]).strip() if len(item) > 1 else ""
+        text = str(item[1]).strip()
         try:
-            score = float(item[2]) if len(item) > 2 else 1.0
+            score = float(item[2])
         except (TypeError, ValueError):
             score = 1.0
             
         if score < min_score or not text:
             continue
             
+        all_confs.append(score)
         box = item[0]
         if not isinstance(box, list) or len(box) != 4:
-            blocks.append({"text": text, "x_center": 0, "y_center": 0, "h": 10})
             continue
             
-        # Calculate bounding box metrics
         xs = [pt[0] for pt in box]
         ys = [pt[1] for pt in box]
+        min_x, max_x = min(xs), max(xs)
         min_y, max_y = min(ys), max(ys)
         
         blocks.append({
             "text": text,
-            "x_center": sum(xs) / 4.0,
-            "y_center": sum(ys) / 4.0,
-            "h": max(1, max_y - min_y),
+            "min_x": min_x,
+            "max_x": max_x,
             "min_y": min_y,
-            "max_y": max_y
+            "max_y": max_y,
+            "cx": (min_x + max_x) / 2,
+            "cy": (min_y + max_y) / 2,
+            "h": max(1, max_y - min_y),
+            "w": max(1, max_x - min_x)
         })
 
     if not blocks:
-        return []
+        return [], all_confs
 
-    # Sort vertically first
-    blocks.sort(key=lambda b: b["y_center"])
-
+    # 1. Vertical Clustering (Lines)
+    # Sort blocks by vertical center
+    blocks.sort(key=lambda b: b["cy"])
     lines = []
-    current_line = [blocks[0]]
     
-    for i in range(1, len(blocks)):
-        curr = blocks[i]
-        prev = current_line[-1] # compare to most recent added conceptually
-        # Alternatively, compare to the average y of the current line
-        line_y = sum(b["y_center"] for b in current_line) / len(current_line)
-        line_h = sum(b["h"] for b in current_line) / len(current_line)
-        
-        # If the current block's vertical center is within roughly half a height of the line's center
-        if abs(curr["y_center"] - line_y) < (line_h * 0.6):
-            current_line.append(curr)
-        else:
-            lines.append(current_line)
-            current_line = [curr]
+    for b in blocks:
+        added = False
+        for line in lines:
+            line_min_y = min(lb["min_y"] for lb in line)
+            line_max_y = max(lb["max_y"] for lb in line)
             
-    if current_line:
-        lines.append(current_line)
+            overlap = min(b["max_y"], line_max_y) - max(b["min_y"], line_min_y)
+            if overlap > (b["h"] * 0.4):
+                line.append(b)
+                added = True
+                break
+        
+        if not added:
+            lines.append([b])
 
-    # Sort each row horizontally and join
-    final_strings = []
-    for row in lines:
-        row.sort(key=lambda b: b["x_center"])
-        # Use tab separation so the LLM intuitively parses the space between columns
-        final_strings.append(" \t ".join(b["text"] for b in row))
+    # 2. Horizontal Formatting & Tab Separation
+    final_output = []
+    lines.sort(key=lambda line: sum(b["cy"] for b in line)/len(line))
 
-    return final_strings
+    for line in lines:
+        line.sort(key=lambda b: b["cx"])
+        
+        formatted_line = ""
+        prev_max_x = None
+        
+        for b in line:
+            if prev_max_x is None:
+                formatted_line = b["text"]
+            else:
+                gap = b["min_x"] - prev_max_x
+                char_w = b["w"] / max(1, len(b["text"]))
+                num_tabs = max(1, int(gap / (char_w * 2)))
+                num_tabs = min(8, num_tabs)
+                
+                formatted_line += ("\t" * num_tabs) + b["text"]
+            
+            prev_max_x = b["max_x"]
+            
+        final_output.append(formatted_line)
+
+    return final_output, all_confs
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +393,7 @@ def _extract_ocr_lines(ocr_result, min_score: float = 0.4) -> list[str]:
 # ---------------------------------------------------------------------------
 
 @app.post("/convert")
-async def convert(
+def convert(
     file: UploadFile = File(...),
     force_ocr: bool = Form(False),
     use_llm: bool = Form(False),
@@ -310,7 +405,7 @@ async def convert(
         start_mem = process.memory_info().rss / 1024 / 1024
 
         original_filename = file.filename
-        file_content = await file.read()
+        file_content = file.file.read()
         file_path = Path(original_filename)
         suffix = file_path.suffix.lower() if file_path.suffix else ".pdf"
 
@@ -318,38 +413,53 @@ async def convert(
             tmp.write(file_content)
             temp_file_path = tmp.name
 
+        extraction_mode = "onnx_hybrid"
+        all_confidences = []
+
         if suffix in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"):
             try:
                 images = [Image.open(temp_file_path).convert("RGB")]
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Failed to open image: {e}")
+            markdown_text, all_confidences = run_onnx_ocr(images)
+            extraction_mode = "onnx_hybrid_image"
         elif suffix == ".pdf":
             try:
-                images = pdf_to_images(temp_file_path)
+                if pdf_has_text(temp_file_path):
+                    markdown_text = extract_text_from_pdf(temp_file_path)
+                    extraction_mode = "fitz_digital_pdf"
+                    # For digital PDF, we set confidence to 1.0 as it's direct extraction
+                    all_confidences = [1.0]
+                else:
+                    images = pdf_to_images(temp_file_path)
+                    markdown_text, all_confidences = run_onnx_ocr(images)
+                    extraction_mode = "onnx_hybrid_pdf"
             except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Failed to convert PDF: {e}")
+                import traceback
+                traceback.print_exc()
+                raise HTTPException(status_code=500, detail=f"PDF extraction failed: {e}")
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
 
-        try:
-            markdown_text = run_onnx_ocr(images)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=f"OCR pipeline failed: {e}")
-
         end_mem = psutil.Process().memory_info().rss / 1024 / 1024
+        
+        # Calculate visual confidence (fallback to 1.0 if no blocks found or direct extraction)
+        if all_confidences:
+            avg_viz_conf = sum(all_confidences) / len(all_confidences)
+        else:
+            avg_viz_conf = 1.0
 
         return {
             "file_name": file_path.stem,
             "original_path": original_filename,
             "content": markdown_text,
+            "avg_visual_confidence": avg_viz_conf, 
             "images": [],
             "images_count": 0,
             "extraction_timestamp": time.time(),
             "processing_time": time.time() - start_time,
             "memory_usage_mb": max(0, end_mem - start_mem),
-            "extraction_mode": "onnx_hybrid",
+            "extraction_mode": extraction_mode,
         }
 
     except HTTPException:

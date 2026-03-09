@@ -1,6 +1,7 @@
 FROM python:3.10-slim
 
 LABEL org.opencontainers.image.source=https://github.com/AvoCahDoe/invoice-data-extractor
+LABEL org.opencontainers.image.description="Invoice Data Extractor RapidOCR Microservice"
 WORKDIR /app
 
 # System deps: libGL for image processing
@@ -21,6 +22,8 @@ RUN pip install --no-cache-dir \
     pymupdf \
     Pillow \
     numpy \
+    pandas \
+    tabulate \
     fastapi \
     uvicorn \
     python-multipart \
