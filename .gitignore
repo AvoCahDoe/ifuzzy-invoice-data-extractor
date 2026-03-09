@@ -15,6 +15,7 @@ dist/
 dataset/
 processed_output/
 models/
+!models/README.md
 test_results/
 *.json
 *.jpg
