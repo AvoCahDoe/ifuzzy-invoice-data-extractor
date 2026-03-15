@@ -1,101 +1,205 @@
-<div class="validate-toolbar">
-  <h2>Field Validation</h2>
-</div>
+<div class="validate-page">
+  <header class="validate-header">
+    <h1>Field Validation</h1>
+    <p class="validate-subtitle">Review and correct extracted invoice data before confirming</p>
+  </header>
 
-<div class="three-col">
-  <!-- Image/PDF Panel -->
-  <aside class="preview-drawer" style="border: 1px solid #ccc; box-shadow: 0 2px 6px rgba(0,0,0,.05); border-radius: 12px; background: #fff; display: flex; flex-direction: column; overflow: hidden;">
-    <div class="preview-header" style="background: #f8f9fa;">
-      <h3>Document Preview</h3>
-    </div>
-    <div class="preview-body" style="flex: 1; overflow-y: auto; padding: 1rem;">
-      <div class="loading-container" *ngIf="previewLoading">
-        <div class="spinner"></div>
-        <p class="loading-text">Loading...</p>
-      </div>
-      <img *ngIf="!previewLoading && !isPdf && previewImgUrl" [src]="previewImgUrl" class="preview-media" alt="Invoice" />
-      <object *ngIf="!previewLoading && isPdf && isBrowser && previewPdfUrl" [data]="previewPdfUrl" type="application/pdf" class="preview-media" style="width: 100%; height: 80vh;">
-        <p>No PDF viewer available. <a [href]="previewPdfUrl" target="_blank">Download instead</a></p>
-      </object>
-      <p *ngIf="!previewLoading && !previewImgUrl && !previewPdfUrl" class="preview-empty">No preview available.</p>
-    </div>
-  </aside>
+  <div class="validate-layout">
+    <div class="layout-top">
+      <!-- Document Preview -->
+      <aside class="preview-drawer">
+        <div class="preview-header">
+          <h3>Document Preview</h3>
+        </div>
+        <div class="preview-body">
+          <div class="loading-container" *ngIf="previewLoading">
+            <div class="spinner"></div>
+            <p class="loading-text">Loading...</p>
+          </div>
+          <img
+            *ngIf="!previewLoading && !isPdf && previewImgUrl"
+            [src]="previewImgUrl"
+            class="preview-media"
+            alt="Invoice"
+          />
+          <object
+            *ngIf="!previewLoading && isPdf && isBrowser && previewPdfUrl"
+            [data]="previewPdfUrl"
+            type="application/pdf"
+            class="preview-media"
+          >
+            <p>No PDF viewer available. <a [href]="previewPdfUrl" target="_blank">Download instead</a></p>
+          </object>
+          <p *ngIf="!previewLoading && !previewImgUrl && !previewPdfUrl" class="preview-empty">
+            No preview available.
+          </p>
+        </div>
+      </aside>
 
-  <!-- OCR Output Panel -->
-  <aside style="border: 1px solid #ccc; box-shadow: 0 2px 6px rgba(0,0,0,.05); border-radius: 12px; background: #fff; display: flex; flex-direction: column; overflow: hidden;">
-    <div class="preview-header" style="background: #f8f9fa;">
-      <h3>OCR Output (Mineru)</h3>
-    </div>
-    <div class="markdown-view" style="flex: 1; margin: 0; border: none; border-radius: 0; max-height: unset; overflow-y: auto;">
-      {{ markdownContent || 'No Markdown content available yet.' }}
-    </div>
-  </aside>
-
-  <!-- Structured Result Panel -->
-  <section class="extracted-fields" style="display: flex; flex-direction: column;">
-    <div class="preview-header" style="background: #fff; margin: -1.5rem -1.5rem 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid #eee;">
-      <h3>Structured Result</h3>
-    </div>
-    
-    <div style="flex: 1; overflow-y: auto;">
-        <div class="loading-container" *ngIf="dataLoading">
-          <div class="spinner"></div>
-          <p class="loading-text">Loading data…</p>
+      <!-- Structured Result -->
+      <section class="extracted-fields">
+        <div class="preview-header extracted-header">
+          <div class="header-main">
+            <h3>Structured Result</h3>
+          </div>
         </div>
 
-        <div *ngIf="!dataLoading">
+        <div class="extracted-body">
+          <div class="loading-container" *ngIf="dataLoading">
+            <div class="spinner"></div>
+            <p class="loading-text">Loading data…</p>
+          </div>
+
+          <div *ngIf="!dataLoading" class="fields-container">
             <div class="stats-bar" *ngIf="ocrTime !== null || structuringTime !== null">
-                <span *ngIf="ocrTime !== null" class="stat-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                    Extraction: <strong>{{ ocrTime | number:'1.2-2' }}s</strong>
-                </span>
-                <span *ngIf="structuringTime !== null" class="stat-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
-                    Structuring: <strong>{{ structuringTime | number:'1.2-2' }}s</strong>
-                </span>
+              <span *ngIf="inputType" class="stat-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="14" rx="2"></rect><path d="M3 13h18"></path></svg>
+                Input: <strong>{{ inputType }}</strong>
+              </span>
+              <span *ngIf="ocrTime !== null" class="stat-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                Extraction: <strong>{{ ocrTime | number:'1.2-2' }}s</strong>
+              </span>
+              <span *ngIf="structuringTime !== null" class="stat-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+                Structuring: <strong>{{ structuringTime | number:'1.2-2' }}s</strong>
+              </span>
+            </div>
+
+            <!-- Validation errors summary -->
+            <div class="validation-errors" *ngIf="validationErrorList.length">
+              <div class="validation-errors-header">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                Please fix the following errors:
+              </div>
+              <ul>
+                <li *ngFor="let msg of validationErrorList">{{ msg }}</li>
+              </ul>
+            </div>
+
+            <div class="validation-warnings" *ngIf="validationWarningList.length">
+              <div class="validation-warnings-header">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3l-8.47-14.14a2 2 0 0 0-3.42 0z"></path></svg>
+                Warnings (you can still confirm):
+              </div>
+              <ul>
+                <li *ngFor="let msg of validationWarningList">{{ msg }}</li>
+              </ul>
+            </div>
+
+            <div *ngIf="llmRawJson" class="llm-preview-box">
+              <h4>LLM Raw Output (before merge)</h4>
+              <pre class="llm-preview-code">{{ llmRawJson }}</pre>
             </div>
 
             <div class="fields-grid">
-                <div class="field"><label>Document Type</label><input type="text" [(ngModel)]="extracted.document_type" /></div>
-                <div class="field"><label>Invoice Number</label><input type="text" [(ngModel)]="extracted.invoice_number" /></div>
-                <div class="field"><label>Date</label><input type="text" [(ngModel)]="extracted.date" /></div>
-                <div class="field"><label>Vendor</label><input type="text" [(ngModel)]="extracted.vendor" /></div>
-                <div class="field"><label>Vendor Address</label><input type="text" [(ngModel)]="extracted.vendor_address" /></div>
-                <div class="field"><label>Vendor Tax ID</label><input type="text" [(ngModel)]="extracted.vendor_tax_id" /></div>
-                <div class="field"><label>Customer Name</label><input type="text" [(ngModel)]="extracted.customer_name" /></div>
-                <div class="field"><label>Due Date</label><input type="text" [(ngModel)]="extracted.due_date" /></div>
-                <div class="field"><label>Payment Method</label><input type="text" [(ngModel)]="extracted.payment_method" /></div>
-                <div class="field"><label>Subtotal</label><input type="text" [(ngModel)]="extracted.subtotal" /></div>
-                <div class="field"><label>Tax Amount</label><input type="text" [(ngModel)]="extracted.tax_amount" /></div>
-                <div class="field"><label>Total</label><input type="text" [(ngModel)]="extracted.total_amount" /></div>
-                <div class="field"><label>Currency</label><input type="text" [(ngModel)]="extracted.currency" /></div>
+              <div class="field" [class.error]="validationErrors['vendor_name']">
+                <label>Vendor Name <span class="required">*</span></label>
+                <input type="text" [(ngModel)]="extracted.vendor_name" placeholder="e.g. Acme Corp" />
+                <span class="field-error" *ngIf="validationErrors['vendor_name']">{{ validationErrors['vendor_name'] }}</span>
+              </div>
+              <div class="field" [class.error]="validationErrors['vendor_address']">
+                <label>Vendor Address</label>
+                <input type="text" [(ngModel)]="extracted.vendor_address" placeholder="Street, city, country" />
+              </div>
+              <div class="field" [class.error]="validationErrors['customer_name']">
+                <label>Customer Name <span class="required">*</span></label>
+                <input type="text" [(ngModel)]="extracted.customer_name" placeholder="Customer or company" />
+                <span class="field-error" *ngIf="validationErrors['customer_name']">{{ validationErrors['customer_name'] }}</span>
+              </div>
+              <div class="field" [class.error]="validationErrors['payment_method']">
+                <label>Payment Method</label>
+                <input type="text" [(ngModel)]="extracted.payment_method" placeholder="e.g. Bank transfer" />
+              </div>
+              <div class="field" [class.error]="validationErrors['document_type']">
+                <label>Document Type</label>
+                <input type="text" [(ngModel)]="extracted.document_type" placeholder="Invoice, Receipt, etc." />
+              </div>
+              <div class="field" [class.error]="validationErrors['invoice_number']">
+                <label>Invoice Number</label>
+                <input type="text" [(ngModel)]="extracted.invoice_number" placeholder="e.g. INV-2024-001" />
+              </div>
+              <div class="field" [class.error]="validationErrors['date']">
+                <label>Date</label>
+                <input type="text" [(ngModel)]="extracted.date" placeholder="YYYY-MM-DD or DD/MM/YYYY" />
+                <span class="field-error" *ngIf="validationErrors['date']">{{ validationErrors['date'] }}</span>
+              </div>
+              <div class="field" [class.error]="validationErrors['due_date']">
+                <label>Due Date</label>
+                <input type="text" [(ngModel)]="extracted.due_date" placeholder="e.g. 2024-12-31" />
+              </div>
+              <div class="field" [class.error]="validationErrors['vendor_tax_id']">
+                <label>Vendor Tax ID</label>
+                <input type="text" [(ngModel)]="extracted.vendor_tax_id" placeholder="ICE, VAT, SIRET" />
+              </div>
+              <div class="field" [class.error]="validationErrors['subtotal']">
+                <label>Subtotal</label>
+                <input type="text" [(ngModel)]="extracted.subtotal" placeholder="0.00" />
+              </div>
+              <div class="field" [class.error]="validationErrors['tax_amount']">
+                <label>Tax Amount</label>
+                <input type="text" [(ngModel)]="extracted.tax_amount" placeholder="0.00" />
+              </div>
+              <div class="field" [class.error]="validationErrors['total_amount']">
+                <label>Total Amount <span class="required">*</span></label>
+                <input type="text" [(ngModel)]="extracted.total_amount" placeholder="0.00" />
+                <span class="field-error" *ngIf="validationErrors['total_amount']">{{ validationErrors['total_amount'] }}</span>
+              </div>
+              <div class="field" [class.error]="validationErrors['currency']">
+                <label>Currency</label>
+                <input type="text" [(ngModel)]="extracted.currency" placeholder="MAD, EUR, USD" />
+              </div>
             </div>
 
             <div class="table-wrapper" *ngIf="extracted.line_items?.length">
-            <table class="line-items-table">
+              <div class="line-items-header">
+                <h4 class="line-items-title">Line Items</h4>
+                <button class="btn btn-small outline" (click)="addLineItem()">Add Item</button>
+              </div>
+              <table class="line-items-table">
                 <thead>
-                <tr>
+                  <tr>
                     <th>Description</th>
                     <th>Quantity</th>
                     <th>Unit Price</th>
                     <th>Total Price</th>
-                </tr>
+                    <th>Action</th>
+                  </tr>
                 </thead>
                 <tbody>
-                <tr *ngFor="let item of extracted.line_items; let i = index; trackBy: trackByIndex">
-                    <td><input type="text" [(ngModel)]="item.description" /></td>
-                    <td><input type="text" [(ngModel)]="item.quantity" /></td>
-                    <td><input type="text" [(ngModel)]="item.unit_price" /></td>
-                    <td><input type="text" [(ngModel)]="item.total_price" /></td>
-                </tr>
+                  <tr *ngFor="let item of extracted.line_items; let i = index; trackBy: trackByIndex" [class.row-error]="validationErrors['line_' + i]">
+                    <td><input type="text" [(ngModel)]="item.description" placeholder="Item description" /></td>
+                    <td><input type="number" [(ngModel)]="item.quantity" placeholder="0" step="0.01" /></td>
+                    <td><input type="number" [(ngModel)]="item.unit_price" placeholder="0.00" step="0.01" /></td>
+                    <td><input type="number" [(ngModel)]="item.total_price" placeholder="0.00" step="0.01" /></td>
+                    <td class="line-item-action">
+                      <button class="btn btn-small danger" (click)="removeLineItem(i)">Remove</button>
+                    </td>
+                  </tr>
                 </tbody>
-            </table>
+              </table>
+            </div>
+            <div class="line-items-empty" *ngIf="!extracted.line_items?.length">
+              <span>No line items extracted yet.</span>
+              <button class="btn btn-small outline" (click)="addLineItem()">Add First Item</button>
             </div>
 
-            <div class="confirm-button-container" *ngIf="extracted?.date || extracted?.document_type">
-                <button class="btn" (click)="confirm()">Confirm Information</button>
+            <div class="confirm-button-container">
+              <button class="btn btn-confirm" (click)="confirm()">Confirm Information</button>
             </div>
+          </div>
         </div>
+      </section>
     </div>
-  </section>
+
+    <!-- OCR Output -->
+    <aside class="ocr-panel">
+      <div class="preview-header">
+        <h3>OCR Output</h3>
+      </div>
+      <div class="markdown-view ocr-markdown">
+        {{ markdownContent || 'No Markdown content available yet.' }}
+      </div>
+    </aside>
+  </div>
 </div>

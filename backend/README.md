@@ -1,52 +1,61 @@
-# ⚙️ Backend Orchestrator
+## Backend (FastAPI)
 
-The Backend Orchestrator is a FastAPI-powered service that manages the core workflow of the invoice data extraction pipeline. It handles file uploads, coordinates with OCR services, and manages interactions with the LLM for structured data extraction.
+FastAPI service that orchestrates the invoice extraction pipeline. It owns the HTTP API, manages tasks, talks to RapidOCR and `llama.cpp`, and persists all results in MongoDB.
 
-## 🚀 Key Features
+### Responsibilities
 
-- **Workflow Management**: Automates the pipeline from raw file upload to structured JSON output.
-- **Microservice Coordination**: Routes requests to RapidOCR, Marker, or MinerU services with automatic fallback logic.
-- **LLM Integration**: Templates prompts and interfaces with the `llama.cpp` server for high-accuracy extraction.
-- **Data Persistence**: Uses MongoDB and GridFS to store file metadata, task statuses, and extraction results.
-- **Scoring System**: Calculates confidence scores based on visual OCR quality, LLM semantic logprobs, and mathematical consistency checks.
+- Accept uploads and store raw files in GridFS.
+- Enqueue and execute background extraction/structuring tasks.
+- Call the OCR service and, when configured, the LLM service.
+- Run rule‑based + regex structuring and optional LLM refinement.
+- Compute confidence scores and expose data to the frontend.
 
-## 🛠️ API Endpoints
+### API surface (port `8001`)
 
-The service runs on port `8001` by default. Swagger documentation is available at `/docs`.
+Swagger docs are available at `http://localhost:8001/docs`.
 
-### File Management
+- **Health**
+  - `GET /health` – simple liveness probe.
 
-- `GET /files`: List all uploaded files and their metadata.
-- `POST /upload`: Upload a new invoice file (`.pdf`, `.jpg`, `.png`).
-- `GET /files/raw/{file_id}`: Retrieve the original file.
-- `DELETE /files/{file_id}`: Delete a file and its associated data.
+- **Files**
+  - `GET /files` – list uploaded files and metadata.
+  - `POST /upload` – upload a new invoice (`.pdf`, `.jpg`, `.png`, etc.).
+  - `GET /files/raw/{file_id}` – stream the original file from GridFS.
+  - `DELETE /files/{file_id}` – delete file + associated tasks/results.
 
-### Task Management
+- **Tasks**
+  - `POST /task/send` – create one or more extraction tasks for a file.
+  - `GET /task/list` – list recent tasks with scores and timings.
+  - `GET /task/state/{task_id}` – get status and scoring components.
+  - `GET /task/data/{task_id}` – full task payload (structured JSON + OCR markdown + metadata).
 
-- `POST /task/send`: Queue a new extraction task.
-- `GET /task/list`: List recent tasks and their statuses.
-- `GET /task/state/{task_id}`: Get the status and metadata for a specific task.
-- `GET /task/data/{task_id}`: Retrieve the extracted OCR text and structured JSON for a task.
-- `POST /task/validate/{task_id}`: Mark a task's results as manually validated.
+- **Results**
+  - `GET /extraction/{file_id}` – latest OCR result for a file.
+  - `PUT /update/{file_id}` – save validated structured data and mark task/file as validated.
 
-### Data & Results
+- **Maintenance**
+  - `POST /system/cleanup` – wipe all files, tasks and results (development only).
 
-- `GET /extraction/{file_id}`: Get the latest OCR extraction for a file.
-- `PUT /update/{file_id}`: Manually update/correct the structured JSON data.
+For a full field‑level description of the pipeline and collections, see `TECHNICAL.md`.
 
-## 🏗️ Environment Variables
+### Environment
 
-- `PORT`: Service port (default: `8001`).
-- `MONGODB_URI`: MongoDB connection string.
-- `RAPIDOCR_SERVICE_URL`: URL for the RapidOCR service.
-- `LLAMA_CPP_HOST`: URL for the `llama.cpp` server.
-- `OUTPUT_DIR`: Directory for storing processed artifacts (OCR markdown, images, etc.).
+Key variables (see `docker-compose.yml` for defaults):
 
-## 🧪 Development
+- `PORT` – HTTP port (default `8001`).
+- `MONGODB_URI` – MongoDB connection string.
+- `RAPIDOCR_SERVICE_URL` – URL of the RapidOCR service.
+- `LLAMA_CPP_HOST` – base URL of the `llama.cpp` server (`http://llamacpp:8080/v1`).
 
-To run the backend locally (outside of Docker):
+### Local development
+
+Run the backend without Docker:
 
 ```bash
+cd backend
 pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
+
+The service expects a running MongoDB and, if you use LLM modes, a reachable `llama.cpp` server configured like the Docker stack.
+

@@ -18,6 +18,7 @@
           <option value="structuring">structuring</option>
           <option value="validated">validated</option>
           <option value="done">done</option>
+          <option value="completed">completed</option>
           <option value="error">error</option>
         </select>
 
@@ -29,12 +30,19 @@
     <div class="table-wrap">
       <table class="table">
         <thead>
-            <th>Invoice</th>
-            <th>Compute</th>
-            <th>Duration</th>
-            <th>Status</th>
-            <th>Confidence</th>
-            <th>Action</th>
+          <tr>
+            <th class="th-name">Invoice</th>
+            <th class="th-type">Input</th>
+            <th class="th-type">Compute</th>
+            <th class="th-type">Mode</th>
+            <th class="th-num">Items</th>
+            <th class="th-num">OCR</th>
+            <th class="th-num">Struct</th>
+            <th class="th-num">Total</th>
+            <th class="th-status">Status</th>
+            <th class="th-score">Confidence</th>
+            <th class="th-action">Actions</th>
+          </tr>
         </thead>
 
         <tbody>
@@ -45,21 +53,28 @@
               </div>
               <div class="sub-text">{{ r.created_at }}</div>
             </td>
-            
-            <td class="compute-cell">
-              <div class="main-text" style="text-transform: capitalize;">{{ r.engine || '-' }}</div>
-              <div class="sub-text">{{ r.precisionName || '-' }}</div>
+
+            <td class="type-cell"><span class="pill pill--type">{{ r.inputType || '—' }}</span></td>
+            <td class="type-cell">
+              <span class="engine-name">{{ r.engine || '—' }}</span>
+              <span class="engine-precision" *ngIf="r.precisionName">{{ r.precisionName }}</span>
+            </td>
+            <td class="type-cell"><span class="mode-name">{{ modeLabel(r.structuring_mode) }}</span></td>
+            <td class="num-cell">{{ r.line_items_count ?? 0 }}</td>
+
+            <td class="num-cell">
+              <span *ngIf="r.extra_time !== null">{{ r.extra_time | number:'1.1-1' }}s</span>
+              <span *ngIf="r.extra_time === null" class="muted">—</span>
             </td>
 
-            <td class="time-cell">
-              <div class="main-text">
-                <span *ngIf="r.extra_time !== null">{{ r.extra_time | number:'1.1-1' }}s</span>
-                <span *ngIf="r.extra_time === null">-</span>
-              </div>
-              <div class="sub-text">
-                <span *ngIf="r.struct_time !== null">+ {{ r.struct_time | number:'1.1-1' }}s</span>
-                <span *ngIf="r.struct_time === null">+ 0s</span>
-              </div>
+            <td class="num-cell">
+              <span *ngIf="r.struct_time !== null">{{ r.struct_time | number:'1.1-1' }}s</span>
+              <span *ngIf="r.struct_time === null" class="muted">—</span>
+            </td>
+
+            <td class="num-cell">
+              <span *ngIf="r.total_time !== null">{{ r.total_time | number:'1.1-1' }}s</span>
+              <span *ngIf="r.total_time === null" class="muted">—</span>
             </td>
 
             <td>
@@ -83,14 +98,15 @@
               <span *ngIf="r.confidence_score === undefined">-</span>
             </td>
 
-            <td class="action">
+            <td class="action-cell">
               <div class="actions">
                 <button
                   class="icon-btn primary"
+                  [class.disabled]="!r.canValidate"
                   [disabled]="!r.canValidate"
-                  (click)="onValidate(r)"
-                  [title]="r.canValidate ? 'Valider' : 'Disponible quand le traitement est terminé'"
-                  aria-label="Valider"
+                  (click)="r.canValidate && onValidate(r)"
+                  [title]="r.canValidate ? 'Validate' : 'Validate (available when processing completes)'"
+                  aria-label="Validate"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -101,10 +117,11 @@
 
                 <button
                   class="icon-btn danger"
+                  [class.disabled]="isBusy(r) || isDeleting(r)"
                   [disabled]="isBusy(r) || isDeleting(r)"
                   (click)="onDelete(r)"
-                  [title]="isDeleting(r) ? 'Suppression…' : 'Supprimer'"
-                  aria-label="Supprimer"
+                  [title]="isDeleting(r) ? 'Deleting…' : (isBusy(r) ? 'Delete (available when processing completes)' : 'Delete')"
+                  aria-label="Delete"
                 >
                   <svg *ngIf="!isDeleting(r)" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -117,11 +134,16 @@
                   <span class="spinner sm" *ngIf="isDeleting(r)"></span>
                 </button>
               </div>
+              <span class="action-hint" *ngIf="isBusy(r)">Processing…</span>
             </td>
           </tr>
 
-          <tr *ngIf="!filtered?.length">
-            <td colspan="7" class="empty">No tasks found.</td>
+          <tr class="empty-row" *ngIf="!filtered?.length">
+            <td colspan="11" class="empty">
+              <span class="empty-icon">📋</span>
+              <span class="empty-msg">No tasks found.</span>
+              <span class="empty-hint">Upload an invoice from the Attachments page.</span>
+            </td>
           </tr>
         </tbody>
       </table>

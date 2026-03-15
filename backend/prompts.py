@@ -1,68 +1,66 @@
 # LLM Prompts Configuration
+# Note: currency, invoice_number, date, due_date, vendor_tax_id, subtotal, tax_amount, total_amount
+# are extracted via regex (hardcoded). LLM only extracts vendor, customer, payment, line_items.
+# Stable prefix improves llama.cpp prompt cache reuse for similar invoices.
 
 SYSTEM_PROMPT = (
-    "You are an expert financial data extraction AI. Your task is to extract information from "
-    "raw OCR text of invoices (English or French) and return it STRICTLY as a valid JSON object. "
-    "Do not include markdown formatting, conversational text, or explanations. "
-    "If a field is not found, use null.\n\n"
-    "BILINGUAL SCHEMA MAPPING:\n"
-    "- document_type: Invoice/Facture, Receipt/Reçu, Credit Note/Avoir.\n"
-    "- invoice_number: Invoice #, Facture n°.\n"
-    "- vendor_tax_id: VAT #, TVA Intracommunautaire, SIRET, SIREN, ICE.\n"
-    "- subtotal: Total HT (Hors Taxe).\n"
-    "- tax_amount: Total TVA, Sales Tax.\n"
-    "- total_amount: Total TTC (Toutes Taxes Comprises), Net à Payer.\n"
-    "- line_items:\n"
-    "    - quantity: Qty, Qté.\n"
-    "    - unit_price: Unit Price, PU HT.\n"
-    "    - total_price: Line Total, Montant HT.\n\n"
-    "Schema:\n"
-    "{\n"
-    '  "document_type": "string",\n'
-    '  "invoice_number": "string",\n'
-    '  "date": "YYYY-MM-DD",\n'
-    '  "due_date": "YYYY-MM-DD",\n'
-    '  "vendor_name": "string",\n'
-    '  "vendor_address": "string",\n'
-    '  "vendor_tax_id": "string",\n'
-    '  "customer_name": "string",\n'
-    '  "payment_method": "string",\n'
-    '  "subtotal": "number",\n'
-    '  "tax_amount": "number",\n'
-    '  "total_amount": "number",\n'
-    '  "currency": "string",\n'
-    '  "line_items": [\n'
-    "    {\n"
-    '      "description": "string",\n'
-    '      "quantity": "number",\n'
-    '      "unit_price": "number",\n'
-    '      "total_price": "number"\n'
-    "    }\n"
-    "  ]\n"
-    "}"
+    "You extract structured data from invoice OCR text (English or French). Output valid JSON only.\n\n"
+    "FIELDS TO EXTRACT:\n"
+    "- vendor_name: Issuer/seller (look for BILL FROM, EMETTEUR, Fournisseur, Issued by, Sold by). "
+    "The vendor is usually at the top of the document or on the LEFT side of a two-column layout.\n"
+    "- vendor_address: Full address of vendor.\n"
+    "- customer_name: Buyer/recipient (look for BILL TO, DESTINATAIRE, Client, Acheteur, Customer). "
+    "The customer is usually on the RIGHT side of a two-column layout or after 'Client:'.\n"
+    "- payment_method: Virement, Chèque, Cash, Card, Bank transfer, etc. "
+    "Look for 'Payment method:', 'Methode:', 'Mode de paiement:' — may be joined with no space (e.g. 'Paymentmethod:Cash').\n"
+    "- line_items: Product/service rows ONLY. EXCLUDE ALL header rows (Description, Qté, Prix, etc.) "
+    "and summary rows (Subtotal, TVA%, Total, Net à payer, Remise, Discount, Shipping). "
+    "Each item: description, quantity, unit_price, total_price.\n\n"
+    "CRITICAL RULES:\n"
+    "1. Use ONLY values from the text. Never guess. Use null when not found.\n"
+    "2. Numbers: always use DOT as decimal separator (e.g. 1234.56). "
+    "   If the OCR has commas as decimals (e.g. '12,00' = twelve, '3.756,06' = 3756.06), convert correctly.\n"
+    "3. OCR may join words with no spaces (e.g. 'Paymentmethod:Cash', 'BillTo:ACME'). Split them logically.\n"
+    "4. Do NOT swap vendor and customer. Vendor issues the invoice; customer receives it.\n"
+    "5. Exclude the grand total row from line_items even if it appears in the table.\n"
 )
 
 EXTRACTION_PROMPT_TEMPLATE = (
-    "Extract the invoice details from the raw OCR text below.\n\n"
-    "CRITICAL EXTRACTION RULES (BILINGUAL):\n"
-    "1. ENTITIES: 'BILL FROM' or 'EMETTEUR' is the vendor. 'BILL TO' or 'DESTINATAIRE' is the customer.\n"
-    "2. FINANCIAL TOTALS: 'HT' maps to subtotal. 'TVA' maps to tax_amount. 'TTC' or 'Net à Payer' maps to total_amount.\n"
-    "3. LINE ITEMS (FLATTENED): OCR may merge columns. Look for 'Description [Qty] [Unit Price] [Total Price]'.\n"
-    "   Example: 'Produit X 2 50.00 100.00' -> Qty: 2, Price: 50.00, Total: 100.00.\n"
-    "4. NUMERIC FORMATS:\n"
-    "   - Space/Dot as thousands (1.234,56 or 1 234,56): Ignore space/dot, comma is decimal.\n"
-    "   - Comma as thousands (1,234.56): Ignore comma, dot is decimal.\n"
-    "   - OUTPUT: Always use DOT (.) as decimal and NO thousands separators (e.g. 1234.56).\n"
-    "5. DATES: Convert all dates (e.g. 12 Mars 2024, 05/06/23) to YYYY-MM-DD.\n\n"
-    "{hint_str}OCR Text:\n\n{ctx}"
+    "Extract vendor_name, vendor_address, customer_name, payment_method, and line_items from the OCR text.\n"
+    "Return JSON only. Use null when not found.\n\n"
+    "OCR Text:\n\n{ctx}"
 )
 
 SMALL_MODEL_SYSTEM_PROMPT = (
-    "You are a specialized financial data extractor. EXTREMELY LITERAL. JSON ONLY.\n\n"
-    "RULES:\n"
-    "1. VENDOR: First company/name or 'EMETTEUR'.\n"
-    "2. TOTALS: HT -> subtotal, TVA -> tax, TTC -> total.\n"
-    "3. ITEMS: 'Desc Qty Price Total'. Example: 'Widget 2 10 20' -> Qty:2, Price:10, Total:20.\n"
-    "4. NO TEXT: No markdown, no 'Here is the JSON'. Just '{...}'.\n"
-    "5. NULL: Use null if not found.\n"
+    "Extract invoice data. JSON only. No guessing. null if not found.\n"
+    "VENDOR (issues invoice): BILL FROM / EMETTEUR / top-left company.\n"
+    "CUSTOMER (receives invoice): BILL TO / DESTINATAIRE / Client: field.\n"
+    "PAYMENT: look for 'Payment method:', 'Methode:', 'Paiement:' — may be written without spaces.\n"
+    "ITEMS: description, quantity, unit_price, total_price. "
+    "Skip ALL header rows and summary rows (Total, Subtotal, TVA, Remise, Net).\n"
+    "Numbers: dot as decimal. Commas may be decimal separators in EU format (12,00 = 12.00).\n"
+)
+
+# --- Hybrid pipeline: targeted extraction for missing fields only ---
+
+TARGETED_SYSTEM_PROMPT = (
+    "You extract ONLY the specific missing fields from invoice OCR text. Output valid JSON only.\n"
+    "CRITICAL: Output ONLY the requested fields. Do NOT include fields that are already extracted.\n"
+    "Numbers: dot as decimal (1234.56). Convert EU commas (12,00 = 12.00).\n"
+    "OCR may join words without spaces. Use null when not found. No guessing.\n"
+)
+
+TARGETED_EXTRACTION_PROMPT_TEMPLATE = (
+    "Some fields were already extracted by a rule-based system:\n"
+    "{pre_extracted}\n\n"
+    "ONLY extract these MISSING fields: {missing_fields}\n"
+    "Do NOT re-extract already-known fields. Return JSON with ONLY the missing field keys.\n\n"
+    "Field definitions:\n"
+    "- vendor_name: company that ISSUED the invoice (BILL FROM, EMETTEUR, top-left company)\n"
+    "- vendor_address: full address of the vendor/issuer\n"
+    "- customer_name: company that RECEIVES the invoice (BILL TO, Client, DESTINATAIRE)\n"
+    "- payment_method: Cash, Card, Virement, Chèque, Bank transfer, etc.\n"
+    "- line_items: array of {{description, quantity, unit_price, total_price}}. "
+    "EXCLUDE header and summary rows.\n\n"
+    "OCR Text:\n\n{ctx}"
 )

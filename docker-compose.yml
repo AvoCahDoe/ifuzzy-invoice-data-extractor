@@ -9,16 +9,10 @@ services:
     environment:
       - PORT=8001
       - HOST=0.0.0.0
-      # URLs:
-      - MINERU_SERVICE_URL=http://mineru_service:8002
-      - MARKER_SERVICE_URL=http://marker_service:8004
       - RAPIDOCR_SERVICE_URL=http://rapidocr_service:8005
       - LLAMA_CPP_HOST=http://llamacpp:8080/v1
       - MONGODB_URI=mongodb://mongodb:27017
-      - CORS_ALLOW_ORIGINS=http://localhost:4001
     depends_on:
-      - mineru_service
-      - marker_service
       - rapidocr_service
       - llamacpp
       - mongodb
@@ -37,35 +31,11 @@ services:
     depends_on:
       - backend
     ports:
-      - "4001:4000"
+      - "80:4000"
     networks:
       - invoice-net
 
-  mineru_service:
-    build:
-      context: ./mineru_service
-      dockerfile: Dockerfile
-    environment:
-      - PORT=8002
-    ports:
-      - "8002:8002"
-    volumes:
-      - mineru_cache:/root/.cache
-    networks:
-      - invoice-net
-
-  marker_service:
-    build:
-      context: ./marker_service
-      dockerfile: Dockerfile
-    environment:
-      - PORT=8004
-    ports:
-      - "8004:8004"
-    volumes:
-      - marker_cache:/root/.cache
-    networks:
-      - invoice-net
+  # Marker and MinerU services have been removed; RapidOCR is the only extraction engine.
 
   rapidocr_service:
     build:
@@ -90,13 +60,7 @@ services:
       - "8034:8084"
     volumes:
       - ./models:/models
-    # Command to run llama-server with CPU optimization (default behavior)
-    # We mount /models. Assuming model file exists there.
-    # If using 'ollama' models, we need to export them to GGUF or download GGUF.
-    # Previous project used start_llama.sh. I'll use a direct command here for simplicity if model is known.
-    # Or reuse the script if I copy it.
-    # Let's assume we download a small model or use one present.
-    # For now, I'll use the same entrypoint script approach and assume I'll copy 'models' folder.
+    # Uses start_llama.sh to run llama-server with CPU optimization
     entrypoint: ["/bin/sh", "/models/start_llama.sh"]
     networks:
       - invoice-net
@@ -116,6 +80,4 @@ networks:
 
 volumes:
   mongo_data:
-  marker_cache:
-  mineru_cache:
   rapidocr_cache:

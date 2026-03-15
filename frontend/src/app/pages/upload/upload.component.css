@@ -34,6 +34,98 @@
   margin: 0.5rem 0;
 }
 
+.upload-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.mode-header h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.mode-header span {
+  font-size: 12px;
+  color: #666;
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.mode-card {
+  background: #f8f9fb;
+  color: #1b1b1b;
+  border: 1px solid #d9dce3;
+  border-radius: 10px;
+  padding: 0.8rem;
+  text-align: left;
+  min-height: 115px;
+  box-shadow: none;
+}
+
+.mode-card:hover {
+  background: #f0f4ff;
+  border-color: #9db6ff;
+}
+
+.mode-card.active {
+  background: #eef3ff;
+  border-color: #5f85ff;
+}
+
+.mode-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+}
+
+.mode-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #545a66;
+}
+
+.settings-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.field label {
+  font-size: 12px;
+  color: #5f6470;
+}
+
+.select {
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid #c9cfdb;
+  background: #fff;
+  color: #1a1a1a;
+  min-width: 210px;
+}
+
+.badge-value {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: #f1f2f6;
+  border: 1px solid #d9dce4;
+  font-size: 12px;
+  color: #414650;
+}
+
 button {
   background-color: #007bff;
   color: white;
@@ -74,17 +166,6 @@ button.secondary:hover { background: #e4e4e4; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { font-weight: 600; color: #555; }
 
-.upload-controls {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-.status-link {
-  color: #007bff;
-  text-decoration: none;
-}
-.status-link:hover { text-decoration: underline; }
-
 .modal-backdrop {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.35);
@@ -103,4 +184,64 @@ button.secondary:hover { background: #e4e4e4; }
 .modal h3 { margin-top: 0; }
 .modal-actions {
   display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem;
+}
+
+.pipeline-diagram {
+  width: 100%;
+  max-width: 980px;
+  margin: 1.5rem auto 0;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  background: #fafafa;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+  font-size: 14px;
+}
+.pipeline-diagram h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 16px;
+}
+.pipeline-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.pipeline-step {
+  flex: 1 1 180px;
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  background: #fff;
+  padding: 0.5rem 0.75rem;
+}
+.step-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.step-body {
+  color: #555;
+  line-height: 1.4;
+}
+.step-note {
+  display: block;
+  font-size: 12px;
+  color: #888;
+  margin-top: 0.2rem;
+}
+.pipeline-arrow {
+  align-self: center;
+  font-size: 18px;
+  color: #999;
+}
+.pipeline-footnote {
+  margin: 0.75rem 0 0;
+  font-size: 12px;
+  color: #666;
+}
+
+@media (max-width: 880px) {
+  .mode-grid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../services/api.service';
@@ -8,7 +8,7 @@ import { ApiService } from '../../services/api.service';
 @Component({
   selector: 'app-upload',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './upload.component.html',
   styleUrl: './upload.component.css'
 })
@@ -18,10 +18,21 @@ export class UploadPage {
   showModal = false;
   lastFileId: string | null = null;
   selectedEngine = 'rapidocr';
-  selectedPrecision = '8';
-  selectedRuns = 1;
+  selectedPrecision = '4';
+  selectedStructMode: 'regex_llm' | 'fuzzy' | 'hybrid' = 'hybrid';
 
   constructor(private api: ApiService, private router: Router) {}
+
+  get showPrecisionSelector(): boolean {
+    return this.selectedStructMode !== 'fuzzy';
+  }
+
+  setStructuringMode(mode: 'regex_llm' | 'fuzzy' | 'hybrid') {
+    this.selectedStructMode = mode;
+    if (mode === 'fuzzy') {
+      this.selectedPrecision = '4';
+    }
+  }
 
   triggerFileInput() {
     const input = document.getElementById('file-upload') as HTMLInputElement | null;
@@ -63,20 +74,9 @@ export class UploadPage {
       this.selectedFile = null;
       this.clearFileInput();
 
-      this.api.sendTask(fileId, false, true, this.selectedEngine, this.selectedPrecision, this.selectedRuns).subscribe({
-        next: () => {
-        },
-        error: () => {
-          this.api.process(fileId, false, this.selectedEngine).subscribe({
-            next: () => {
-              this.api.structure(fileId).subscribe({
-                next: () => {},
-                error: () => {}
-              });
-            },
-            error: () => {}
-          });
-        }
+      this.api.sendTask(fileId, false, true, this.selectedEngine, this.selectedPrecision, 1, this.selectedStructMode).subscribe({
+        next: () => {},
+        error: () => {}
       });
     } catch (e) {
       console.error(e);

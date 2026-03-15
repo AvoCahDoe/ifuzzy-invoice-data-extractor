@@ -94,18 +94,19 @@ def pdf_has_text(pdf_path: str) -> bool:
         print(f"pdf_has_text error: {e}")
     return False
 
-def extract_text_from_pdf(pdf_path: str) -> str:
-    """Extract embedded text and tables directly using PyMuPDF (No OCR)."""
+def extract_text_from_pdf(pdf_path: str) -> tuple[str, list[dict]]:
+    """Extract embedded text and tables directly using PyMuPDF (No OCR). Returns (markdown, blocks)."""
     import fitz
     doc = fitz.open(pdf_path)
     all_sections = []
-    
+    all_blocks: list[dict] = []
+
     for page_num, page in enumerate(doc):
         if len(doc) > 1:
             all_sections.append(f"\n---\n*Page {page_num + 1}*\n")
-            
+
         page_sections = []
-        
+
         # 1. Extract tables via PyMuPDF
         tabs = page.find_tables()
         table_bboxes = []
@@ -122,15 +123,15 @@ def extract_text_from_pdf(pdf_path: str) -> str:
                     md = str(table.to_pandas())
                 if md and md.strip():
                     page_sections.append(md)
-        
+
         # 2. Extract regular text blocks, omitting those inside tables
         blocks = page.get_text("blocks")
         text_blocks = []
         for b in blocks:
             x0, y0, x1, y1, text, _, block_type = b
-            if block_type != 0: # 0 means text block
+            if block_type != 0:  # 0 means text block
                 continue
-            
+
             cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
             in_table = False
             for t_bbox in table_bboxes:
@@ -138,20 +139,26 @@ def extract_text_from_pdf(pdf_path: str) -> str:
                 if tx0 <= cx <= tx1 and ty0 <= cy <= ty1:
                     in_table = True
                     break
-                    
+
             if not in_table and text.strip():
                 text_blocks.append((y0, x0, text.strip()))
-                
+                all_blocks.append({
+                    "text": text.strip(),
+                    "bbox": [x0, y0, x1, y1],
+                    "confidence": 1.0,
+                    "page_num": page_num
+                })
+
         # Sort top-to-bottom, then left-to-right
         text_blocks.sort(key=lambda x: (x[0], x[1]))
-        
+
         if text_blocks:
             page_sections.append("\n\n".join([b[2] for b in text_blocks]))
-            
+
         all_sections.extend(page_sections)
-        
+
     doc.close()
-    return "\n\n".join(all_sections)
+    return "\n\n".join(all_sections), all_blocks
 
 
 # ---------------------------------------------------------------------------
@@ -215,13 +222,14 @@ class OcrWrapper:
 
 table_engine.ocr_engine = OcrWrapper(ocr_engine)
 
-def run_onnx_ocr(images: list) -> tuple[str, list[float]]:
+def run_onnx_ocr(images: list) -> tuple[str, list[float], list[dict]]:
     """
     Hybrid ONNX pipeline per page using masking to prevent text duplication.
-    Returns (markdown_text, all_confidences)
+    Returns (markdown_text, all_confidences, all_blocks) where blocks have text, bbox, confidence, page_num.
     """
     all_sections: list[str] = []
     all_confidences: list[float] = []
+    all_blocks: list[dict] = []
 
     for page_num, pil_img in enumerate(images):
         if len(images) > 1:
@@ -276,30 +284,33 @@ def run_onnx_ocr(images: list) -> tuple[str, list[float]]:
         # ── 3. Full-page OCR on the remaining content ─────────────────────
         try:
             ocr_result = ocr_engine(img_for_ocr)
-            lines, confs = _extract_ocr_lines(ocr_result)
+            lines, confs, page_blocks = _extract_ocr_lines(ocr_result)
             if lines:
                 page_sections.append("\n".join(lines))
                 all_confidences.extend(confs)
+            for blk in page_blocks:
+                blk["page_num"] = page_num
+                all_blocks.append(blk)
         except Exception as e:
             print(f"[ocr] page {page_num + 1} failed: {e}")
             import traceback; traceback.print_exc()
 
         all_sections.extend(page_sections)
 
-    return "\n\n".join(s for s in all_sections if s.strip()), all_confidences
+    return "\n\n".join(s for s in all_sections if s.strip()), all_confidences, all_blocks
 
 
-def _extract_ocr_lines(ocr_result, min_score: float = 0.4) -> tuple[list[str], list[float]]:
+def _extract_ocr_lines(ocr_result, min_score: float = 0.4) -> tuple[list[str], list[float], list[dict]]:
     """
     Robust line extraction using spatial clustering (vertical overlap) and
     physical distance-based tab separation to preserve table column layout.
-    Returns (lines, confidences)
+    Returns (lines, confidences, blocks) where blocks have text, bbox, confidence for rule-based structuring.
     """
     if ocr_result is None:
-        return [], []
+        return [], [], []
     result_list = ocr_result[0] if isinstance(ocr_result, (list, tuple)) else ocr_result
     if not result_list:
-        return [], []
+        return [], [], []
 
     blocks = []
     all_confs = []
@@ -327,6 +338,8 @@ def _extract_ocr_lines(ocr_result, min_score: float = 0.4) -> tuple[list[str], l
         
         blocks.append({
             "text": text,
+            "bbox": [min_x, min_y, max_x, max_y],
+            "confidence": score,
             "min_x": min_x,
             "max_x": max_x,
             "min_y": min_y,
@@ -338,7 +351,7 @@ def _extract_ocr_lines(ocr_result, min_score: float = 0.4) -> tuple[list[str], l
         })
 
     if not blocks:
-        return [], all_confs
+        return [], all_confs, []
 
     # 1. Vertical Clustering (Lines)
     # Sort blocks by vertical center
@@ -385,7 +398,9 @@ def _extract_ocr_lines(ocr_result, min_score: float = 0.4) -> tuple[list[str], l
             
         final_output.append(formatted_line)
 
-    return final_output, all_confs
+    # Return blocks in API format: text, bbox, confidence (drop internal keys for response)
+    api_blocks = [{"text": b["text"], "bbox": b["bbox"], "confidence": b["confidence"]} for b in blocks]
+    return final_output, all_confs, api_blocks
 
 
 # ---------------------------------------------------------------------------
@@ -415,24 +430,24 @@ def convert(
 
         extraction_mode = "onnx_hybrid"
         all_confidences = []
+        all_blocks = []
 
         if suffix in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"):
             try:
                 images = [Image.open(temp_file_path).convert("RGB")]
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Failed to open image: {e}")
-            markdown_text, all_confidences = run_onnx_ocr(images)
+            markdown_text, all_confidences, all_blocks = run_onnx_ocr(images)
             extraction_mode = "onnx_hybrid_image"
         elif suffix == ".pdf":
             try:
                 if pdf_has_text(temp_file_path):
-                    markdown_text = extract_text_from_pdf(temp_file_path)
+                    markdown_text, all_blocks = extract_text_from_pdf(temp_file_path)
                     extraction_mode = "fitz_digital_pdf"
-                    # For digital PDF, we set confidence to 1.0 as it's direct extraction
                     all_confidences = [1.0]
                 else:
                     images = pdf_to_images(temp_file_path)
-                    markdown_text, all_confidences = run_onnx_ocr(images)
+                    markdown_text, all_confidences, all_blocks = run_onnx_ocr(images)
                     extraction_mode = "onnx_hybrid_pdf"
             except Exception as e:
                 import traceback
@@ -442,7 +457,7 @@ def convert(
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
 
         end_mem = psutil.Process().memory_info().rss / 1024 / 1024
-        
+
         # Calculate visual confidence (fallback to 1.0 if no blocks found or direct extraction)
         if all_confidences:
             avg_viz_conf = sum(all_confidences) / len(all_confidences)
@@ -453,7 +468,8 @@ def convert(
             "file_name": file_path.stem,
             "original_path": original_filename,
             "content": markdown_text,
-            "avg_visual_confidence": avg_viz_conf, 
+            "blocks": all_blocks,
+            "avg_visual_confidence": avg_viz_conf,
             "images": [],
             "images_count": 0,
             "extraction_timestamp": time.time(),

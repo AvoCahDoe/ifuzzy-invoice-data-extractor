@@ -38,6 +38,9 @@ download_if_missing "$PATH_350M" "$URL_350M"
 
 echo "Launching parallel llama.cpp servers..."
 
+# Ensure KV cache directory exists
+mkdir -p "$DIR/kv_cache"
+
 # Shared parameters
 # -t 4: Limit threads per server to follow physical core count logic (4x4 = 16 max threads)
 # --mlock: Lock models in RAM to prevent swapping
@@ -45,15 +48,15 @@ OPTS="-c 8192 -t 4 --mlock --n-gpu-layers 0 --host 0.0.0.0 --slot-save-path /mod
 
 # Start servers in background
 # Port 8080: Q8_0 (Default)
-./llama-server -m "$PATH_Q8" --port 8080 $OPTS > /var/log/llama_q8.log 2>&1 &
+/app/llama-server -m "$PATH_Q8" --port 8080 $OPTS &
 # Port 8081: Q4_0
-./llama-server -m "$PATH_Q4" --port 8081 $OPTS > /var/log/llama_q4.log 2>&1 &
+/app/llama-server -m "$PATH_Q4" --port 8081 $OPTS &
 # Port 8082: Q5_K_M
-./llama-server -m "$PATH_Q5" --port 8082 $OPTS > /var/log/llama_q5.log 2>&1 &
+/app/llama-server -m "$PATH_Q5" --port 8082 $OPTS &
 # Port 8083: F16
-./llama-server -m "$PATH_F16" --port 8083 $OPTS > /var/log/llama_f16.log 2>&1 &
+/app/llama-server -m "$PATH_F16" --port 8083 $OPTS &
 # Port 8084: 350M
-./llama-server -m "$PATH_350M" --port 8084 $OPTS > /var/log/llama_350m.log 2>&1 &
+/app/llama-server -m "$PATH_350M" --port 8084 $OPTS &
 
 echo "All servers started. Monitoring..."
 # Keep container alive and wait for all background processes

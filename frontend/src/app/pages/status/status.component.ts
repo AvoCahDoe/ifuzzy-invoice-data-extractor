@@ -10,12 +10,14 @@ type TaskRow = {
   file_id: string;
   filename?: string;
   baseName?: string;
+  inputType?: 'pdf' | 'img';
   status: string;
   created_at?: string;
   updated_at?: string;
   canValidate: boolean;
   extra_time: number | null;
   struct_time: number | null;
+  total_time: number | null;
   engine?: string;
   precision?: string;
   precisionName?: string;
@@ -23,6 +25,8 @@ type TaskRow = {
   score_viz?: number;
   score_sem?: number;
   score_log?: number;
+  structuring_mode?: string;
+  line_items_count?: number;
 };
 
 @Component({
@@ -55,25 +59,37 @@ export class StatusPage implements OnInit, OnDestroy {
       this.rows = (list?.tasks ?? []).map((t: any) => {
         const filename: string = t.filename ?? '';
         const baseName: string = filename ? filename.replace(/\.[^.]+$/, '') : (t.file_id ?? '');
+        const lowerName = filename.toLowerCase();
+        const inputType: 'pdf' | 'img' = lowerName.endsWith('.pdf') ? 'pdf' : 'img';
         const status: string = t.status || 'unknown';
+        const extra = typeof t.processing_time === 'number' ? t.processing_time : null;
+        const struct = typeof t.structuring_time === 'number' ? t.structuring_time : null;
+        const total =
+          extra === null && struct === null
+            ? null
+            : (extra || 0) + (struct || 0);
         return {
           task_id: t.task_id ?? null,
           file_id: t.file_id,
           filename,
           baseName,
+          inputType,
           status,
           created_at: t.created_at,
           updated_at: t.updated_at,
           canValidate: status === 'done' || status === 'completed',
-          extra_time: t.processing_time ?? null, 
-          struct_time: t.structuring_time ?? null,
+          extra_time: extra,
+          struct_time: struct,
+          total_time: total,
           engine: t.engine,
           precision: t.precision,
           precisionName: t.precision === '16' || t.precision === 'f16' ? 'F16' : (t.precision === '350m' ? '350M' : (t.precision ? t.precision + '-bit' : '')),
           confidence_score: t.confidence_score,
           score_viz: t.score_viz,
           score_sem: t.score_sem,
-          score_log: t.score_log
+          score_log: t.score_log,
+          structuring_mode: t.structuring_mode || '-',
+          line_items_count: typeof t.line_items_count === 'number' ? t.line_items_count : 0,
         };
       });
     } catch {
@@ -94,6 +110,7 @@ export class StatusPage implements OnInit, OnDestroy {
           canValidate: processed,
           extra_time: null,
           struct_time: null,
+          total_time: null,
         } as TaskRow;
       });
     } finally {
@@ -192,6 +209,14 @@ export class StatusPage implements OnInit, OnDestroy {
     if (val === undefined || val === null) return '0';
     const v = val <= 1 ? val * 100 : val;
     return Math.round(v).toString();
+  }
+
+  modeLabel(mode: string | undefined): string {
+    const m = (mode || '').toLowerCase();
+    if (m === 'regex_llm') return 'Regex + LLM';
+    if (m === 'fuzzy') return 'Fuzzy Search';
+    if (m === 'hybrid') return 'Hybrid';
+    return '-';
   }
     
 }

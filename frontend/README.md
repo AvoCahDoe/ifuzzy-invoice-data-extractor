@@ -1,54 +1,54 @@
-# 💻 Invoice Data Extractor Frontend
+## Frontend (Angular)
 
-The frontend for the Invoice Data Extractor is a modern, high-performance web application built with **Angular 20** and **Angular SSR (Server-Side Rendering)**. It provides an intuitive interface for managing the entire invoice extraction lifecycle.
+Angular SSR application that provides the UI for uploading invoices, tracking tasks, and validating structured results.
 
-## 🚀 Key Features
+### Pages
 
-- **Drag-and-Drop Upload**: Simple interface for uploading single or batch invoices.
-- **Real-time Status Tracking**: Monitor extraction tasks through queued, extracting, and structuring states.
-- **Side-by-Side Visualization**: View the original invoice image alongside the extracted Markdown and structured JSON.
-- **Interactive Correction**: Built-in editor to manually validate and correct extracted fields.
-- **Confidence Scoring**: Visual indicators for extraction quality (Scoring: Visual OCR + LLM Semantic + Mathematical Logic).
-- **Responsive Design**: Optimized for both desktop and mobile viewing.
+- **Upload** (`/upload`)
+  - Drag‑and‑drop upload (PDF / images).
+  - Choose structuring mode: `Regex + LLM`, `Fuzzy`, or `Hybrid`.
+  - Select LLM precision (4/5/8/16/350m/all) when relevant.
+  - Starts a task via the backend `/task/send` endpoint.
 
-## 🛠️ Tech Stack
+- **Status** (`/status`)
+  - Lists recent tasks with:
+    - input type, engine, structuring mode,
+    - item count,
+    - OCR / structuring / total times,
+    - final confidence score.
+  - Provides navigation to the validation page.
+  - Includes a “Clean database” button (calls `/system/cleanup`).
 
-- **Framework**: Angular v20
-- **Rendering**: Angular SSR (Server-Side Rendering) for fast initial loads.
-- **Styling**: Tailwind CSS (if applicable) / Custom CSS.
-- **State Management**: Reactive services with RxJS.
+- **Validate** (`/validate/:taskId/:fileId`)
+  - Loads task data from `/task/data/{taskId}`.
+  - Shows:
+    - PDF/image preview (via `/files/raw/{file_id}`),
+    - OCR markdown,
+    - structured fields and line items in editable form,
+    - optional raw LLM JSON for inspection.
+  - Runs client‑side validation (dates, totals, line items).
+  - Sends corrections to `PUT /update/{file_id}`.
 
-## 🚀 Getting Started
+### Tech stack
 
-### Prerequisites
+- Angular 17+ with standalone components and SSR.
+- RxJS for async flows (`firstValueFrom`, streaming API calls).
+- Plain CSS for layouts (`upload`, `status`, `validate` pages).
 
-- [Node.js](https://nodejs.org/) (LTS recommended)
-- [Angular CLI](https://angular.dev/tools/cli)
-
-### Installation
+### Local development
 
 ```bash
+cd frontend
 npm install
+npm start   # or: npm run dev:ssr, depending on your scripts
 ```
 
-### Development server
+The dev server typically runs on `http://localhost:4200/` and proxies API calls to the backend (see environment configuration).
 
-Run `npm start` (or `ng serve`) for a local dev server. Navigate to `http://localhost:4200/`. The app will automatically reload on changes.
+### Configuration
 
-### Production Build
+The API base URL is derived at runtime:
 
-```bash
-npm run build
-```
+- In Docker, via `API_BASE_URL` env var (e.g. `http://backend:8001`).
+- In dev, by default it targets `http://localhost:8001`.
 
-This compiles the project and optimizes it for performance, storing build artifacts in the `dist/` directory.
-
-## 🏗️ Architecture
-
-- **`src/app/pages`**: Contains the main views (Upload, Status, Results).
-- **`src/app/services`**: Handles API communication with the Backend Orchestrator.
-- **`src/app/components`**: Reusable UI elements for data visualization and editing.
-
-## 🏁 Configuration
-
-The frontend connects to the backend API via the `API_BASE_URL` environment variable (configured for Docker) or defaults to `http://localhost:8001` in development.
