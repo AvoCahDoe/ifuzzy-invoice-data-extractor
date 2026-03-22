@@ -1,0 +1,100 @@
+/* The host element must fill whatever space is given to it */
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.zoomable-viewer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: #fff;
+  border-radius: 8px;
+}
+
+.zoomable-viewer--modal {
+  max-width: 95vw;
+  max-height: 90vh;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.zoomable-viewer__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  flex-shrink: 0;
+  border-radius: 8px 8px 0 0;
+}
+
+.zoomable-viewer__label {
+  font-size: 0.8rem;
+  color: #6b7280;
+  min-width: 3rem;
+}
+
+.zoomable-viewer__controls {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.zoomable-viewer__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.zoomable-viewer__btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.zoomable-viewer__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.zoomable-viewer__btn--close {
+  margin-left: auto;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.zoomable-viewer__hint {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-left: 0.25rem;
+  white-space: nowrap;
+}
+
+/* Scrollable area that contains the image */
+.zoomable-viewer__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  cursor: zoom-in;
+  background: #f9fafb;
+  border-radius: 0 0 8px 8px;
+}
+
+/* The image - width is set dynamically via [style.width.%] binding.
+   No object-fit so it actually grows when width > 100%.
+   No max-width so the zoom can exceed the container. */
+.zoomable-viewer__img {
+  display: block;
+  height: auto;
+}

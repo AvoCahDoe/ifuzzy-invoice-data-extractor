@@ -99,23 +99,182 @@
   color: #374151;
 }
 
+.click-hint {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.preview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.zoom-controls .icon-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.zoom-controls .icon-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.zoom-controls .icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.zoom-label {
+  font-size: 0.8rem;
+  color: #6b7280;
+  min-width: 3rem;
+  text-align: center;
+}
+
 .preview-body {
-  padding: 0.75rem;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0.5rem;
+}
+
+.preview-zoom-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+/* PDF preview: embedded viewer */
+.preview-pdf-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #525659;
+}
+
+.preview-pdf-embed {
   flex: 1;
   min-height: 300px;
-}
-.preview-media {
-  display: block;
   width: 100%;
-  height: 100%;
-  min-height: 400px;
   border: none;
-  object-fit: contain;
 }
+
+.preview-pdf-fallback {
+  padding: 2rem;
+  text-align: center;
+  color: #6b7280;
+  background: #f9fafb;
+}
+
+.preview-pdf-fallback a {
+  color: #2563eb;
+}
+
 .preview-empty {
   color: #6b7280;
   text-align: center;
   margin: 2rem 0;
+}
+
+/* Image zoom modal */
+.image-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.image-modal {
+  width: 90vw;
+  height: 88vh;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.image-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  flex-shrink: 0;
+}
+
+.image-modal-header .zoom-controls {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.image-modal-header .close-btn {
+  margin-left: auto;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.image-modal-body {
+  flex: 1;
+  min-height: 300px;
+  overflow: auto;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 1rem;
+}
+
+.image-modal-img {
+  display: block;
+  object-fit: contain;
+  min-width: 100%;
+}
+
+.image-modal-pdf-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.image-modal-pdf-wrapper .image-modal-header {
+  flex-shrink: 0;
+}
+
+.image-modal-pdf {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.image-modal-pdf .pdf-object {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  border: none;
 }
 
 .btn {

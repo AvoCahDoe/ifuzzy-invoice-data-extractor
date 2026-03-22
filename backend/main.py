@@ -278,6 +278,8 @@ def extract_fields_hardcoded(ocr_text: str) -> dict:
     money_pat = r'((?:\d{1,3}(?:[,. ]\d{3})*[,.]\d{2}|\d+[,.]\d{2}|\d+)(?:\s*(?:MAD|EUR|USD|GBP|DH))?)'
     money_prefix = r'[\s:\t]*'
     money_opt = r'[\$€£]?'
+    # Optional parenthetical between label and value, e.g. "Tax (20%):" or "VAT [10%]"
+    opt_paren = r'\s*(?:\([^)]*\)|\[[^\]]*\])?\s*'
 
     if re.search(r'\$|USD', ctx, re.I): out["currency"] = "USD"
     elif re.search(r'MAD|Dirham|DH\b', ctx, re.I): out["currency"] = "MAD"
@@ -323,7 +325,7 @@ def extract_fields_hardcoded(ocr_text: str) -> dict:
                 if c2.lower() not in banned_invoice_vals:
                     out["invoice_number"] = c2
 
-    date_labels = r'(?:Invoice\s*date|Date\s*d\'[eé]mission|Date\s*de\s*facture|Date\s*de\s*facturation|Factur[eé]\s*le|[eÉ]mis\s*le|Date|Le\s*:|Date\s*:)'
+    date_labels = r'(?:Invoice\s*date|Date\s*of\s*issue|Date\s*d\'[eé]mission|Date\s*de\s*facture|Date\s*de\s*facturation|Factur[eé]\s*le|[eÉ]mis\s*le|Date|Le\s*:|Date\s*:)'
     date_val = r'([A-Za-zÀ-ÿ]{3,12}\.?\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4}|\d{1,2}\.\d{1,2}\.\d{2,4})'
     dates = re.findall(rf'(?i){date_labels}[\s:]*{date_val}', ctx_no_tables)
     for d in dates:
@@ -333,7 +335,7 @@ def extract_fields_hardcoded(ocr_text: str) -> dict:
             break
 
     due_labels = r'(?:Due\s*date|[Éé]ch[eé]ance|Date\s*d\'[eé]ch[eé]ance|Payment\s*due|[Éé]ch[eé]ance\s*de\s*paiement|[Àa]\s*payer\s*avant|Payable\s*avant|Date\s*limite|Payable\s*le)'
-    due = re.findall(rf'(?i){due_labels}[\s:]*([A-Za-z0-9/\-\.\s,]+?)(?:\n|$|[A-Z])', ctx_no_tables)
+    due = re.findall(rf'(?i){due_labels}[\s:]*([A-Za-z0-9/\-\.\s,]+?)(?:\n|$)', ctx_no_tables)
     for d in due:
         normalized = _normalize_date((d or "").strip())
         if normalized:
@@ -349,20 +351,73 @@ def extract_fields_hardcoded(ocr_text: str) -> dict:
             if len(candidate) >= 6 and candidate.lower() not in {"number", "invoice", "tax id"}:
                 out["vendor_tax_id"] = candidate
 
-    # Total amount — handle "Total :\t2,890.85 MAD" and "Total:11.00MAD"
-    total_labels = r'(?<!Sub)(?:Total\s*(?:TTC|g[eé]n[eé]ral|[àa]\s*payer|amount)?|Net\s*[àa]\s*payer|Montant\s*TTC|NET\s*PAYABLE|Amount\s*due|Balance\s*due|Montant\s*d[uû])'
-    totals = re.findall(rf'(?i){total_labels}' + money_prefix + money_opt + money_pat, ctx)
-    totals += re.findall(rf'(?is){total_labels}\s*[:\-]?\s*\n+\s*' + money_opt + money_pat, ctx)
+    # Total amount — handle "Total :\t2,890.85 MAD", "Total Due:\n$2,400.00", pipe tables
+    total_labels = (
+        r'(?<!Sub)(?:'
+        r'Grand\s*Total|Invoice\s*Total|Total\s*Amount|Net\s*Total|'
+        r'Bill\s*Amount|Montant\s*Total|Montant\s*[àa]\s*payer|'
+        r'Total\s*(?:Due|TTC|g[eé]n[eé]ral|[àa]\s*payer|amount)?|'
+        r'Net\s*[àa]\s*payer|Montant\s*TTC|NET\s*PAYABLE|'
+        r'Amount\s*due|Balance\s*due|Montant\s*d[uû]'
+        r')'
+    )
+    totals = re.findall(rf'(?i){total_labels}' + opt_paren + money_prefix + money_opt + money_pat, ctx)
+    totals += re.findall(rf'(?is){total_labels}' + opt_paren + r'\s*[:\-]?\s*\n+\s*' + money_opt + money_pat, ctx)
     totals += re.findall(rf'(?i)\|\s*{total_labels}\s*\|\s*' + money_opt + money_pat + r'\s*\|', ctx)
-    if totals: out["total_amount"] = _parse_money(totals[-1].strip())
+    # Pipe table with multiple columns: | Total | | $subtotal | $tax | $total | — capture last (Grossworth)
+    totals += re.findall(rf'(?i)\|\s*Total\s*\|.*\|\s*' + money_opt + money_pat + r'\s*\|', ctx)
+    # Inline table cell: "Total:1,584.09MAD" or "Total : 11.00MAD" (Invorate/no-separator format)
+    totals += re.findall(rf'(?i)Total\s*:\s*({money_opt}{money_pat})', ctx)
+    # Same row with three amounts: subtotal, tax, total — set all at once
+    triple = re.search(rf'(?i)\|\s*Total\s*\|.*\|\s*' + money_opt + money_pat + r'\s*\|\s*' + money_opt + money_pat + r'\s*\|\s*' + money_opt + money_pat + r'\s*\|', ctx)
+    if triple:
+        g = triple.groups()
+        if len(g) >= 3 and not out["subtotal"]: out["subtotal"] = _parse_money(g[0])
+        if len(g) >= 3 and not out["tax_amount"]: out["tax_amount"] = _parse_money(g[1])
+        if len(g) >= 3 and not out["total_amount"]: out["total_amount"] = _parse_money(g[2])
+    if totals:
+        last = totals[-1]
+        val = last[-1] if isinstance(last, tuple) else last
+        out["total_amount"] = out["total_amount"] or _parse_money(str(val).strip())
 
-    subtotal_labels = r'(?:Subtotal|Total\s*HT|Hors\s*Taxe|Sous[\-\s]?total|Total\s*partiel|Montant\s*HT)'
-    subtotals = re.findall(rf'(?i){subtotal_labels}' + money_prefix + money_opt + money_pat, ctx)
-    if subtotals: out["subtotal"] = _parse_money(subtotals[0].strip())
+    subtotal_labels = (
+        r'(?:'
+        r'Sub[\s\-]?total|S\.Total|Sous[\-\s]?total|'
+        r'Total\s*HT|Total\s*partiel|Montant\s*HT|'
+        r'Hors\s*Taxe|Networth|Net\s*Amount|Gross\s*Amount|'
+        r'Amount\s*Before\s*Tax|Pre[\-\s]?tax'
+        r')'
+    )
+    subtotals = re.findall(rf'(?i){subtotal_labels}' + opt_paren + money_prefix + money_opt + money_pat, ctx)
+    subtotals += re.findall(rf'(?is){subtotal_labels}' + opt_paren + r'\s*[:\-]?\s*\n+\s*' + money_opt + money_pat, ctx)
+    subtotals += re.findall(rf'(?i)\|\s*{subtotal_labels}\s*\|\s*' + money_opt + money_pat + r'\s*\|', ctx)
+    # Inline table cell: "Subtotal:1,329.05MAD" (Invorate format)
+    subtotals += re.findall(rf'(?i)Subtotal\s*:\s*({money_opt}{money_pat})', ctx)
+    if subtotals and out["subtotal"] is None:
+        first = subtotals[0]
+        val = first[-1] if isinstance(first, tuple) else first
+        out["subtotal"] = _parse_money(str(val).strip())
 
-    tax_labels = r'(?:TVA|Tax(?:e)?|Sales\s*Tax|Montant\s*TVA|Total\s*TVA|VAT(?:\s*\[\d+%\])?)'
-    tax_vals = re.findall(rf'(?i){tax_labels}' + money_prefix + money_opt + money_pat, ctx)
-    if tax_vals: out["tax_amount"] = _parse_money(tax_vals[-1].strip())
+    tax_labels = (
+        r'(?:'
+        r'TVA|Tax(?:e)?(?:\s*[\d\.]+%)?|Sales\s*Tax(?:\s*[\d\.]+%)?|'
+        r'Montant\s*TVA|Total\s*TVA|'
+        r'VAT(?:\s*\[[\d\.]+%\])?|'
+        r'HST(?:\s*[\d\.]+%)?|GST(?:\s*[\d\.]+%)?|PST(?:\s*[\d\.]+%)?|'
+        r'IVA'
+        r')'
+    )
+    tax_vals = re.findall(rf'(?i){tax_labels}' + opt_paren + money_prefix + money_opt + money_pat, ctx)
+    tax_vals += re.findall(rf'(?is){tax_labels}' + opt_paren + r'\s*[:\-]?\s*\n+\s*' + money_opt + money_pat, ctx)
+    tax_vals += re.findall(rf'(?i)\|\s*{tax_labels}\s*\|\s*' + money_opt + money_pat + r'\s*\|', ctx)
+    if tax_vals and out["tax_amount"] is None:
+        last = tax_vals[-1]
+        val = last[-1] if isinstance(last, tuple) else last
+        out["tax_amount"] = _parse_money(str(val).strip())
+
+    # Ensure tax_amount is always numeric (float) or None
+    if out["tax_amount"] is not None and not isinstance(out["tax_amount"], (int, float)):
+        out["tax_amount"] = _parse_money(str(out["tax_amount"])) if str(out["tax_amount"]).strip() else None
 
     return out
 

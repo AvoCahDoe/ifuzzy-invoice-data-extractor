@@ -19,7 +19,7 @@ export class UploadPage {
   lastFileId: string | null = null;
   selectedEngine = 'rapidocr';
   selectedPrecision = '4';
-  selectedStructMode: 'regex_llm' | 'fuzzy' | 'hybrid' = 'hybrid';
+  selectedStructMode: 'regex_llm' | 'fuzzy' | 'hybrid' = 'fuzzy';
 
   constructor(private api: ApiService, private router: Router) {}
 

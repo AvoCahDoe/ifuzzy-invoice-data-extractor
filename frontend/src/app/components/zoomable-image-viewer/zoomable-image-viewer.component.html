@@ -1,0 +1,21 @@
+<div class="zoomable-viewer" [class.zoomable-viewer--modal]="mode === 'modal'">
+  <div class="zoomable-viewer__toolbar" (click)="$event.stopPropagation()">
+    <span class="zoomable-viewer__label">{{ (zoom * 100) | number:'0.0-0' }}%</span>
+    <div class="zoomable-viewer__controls">
+      <button type="button" class="zoomable-viewer__btn" (click)="zoomOut()" [disabled]="zoom <= ZOOM_MIN" title="Zoom out (−)">−</button>
+      <button type="button" class="zoomable-viewer__btn" (click)="zoomIn()" [disabled]="zoom >= ZOOM_MAX" title="Zoom in (+)">+</button>
+      <button type="button" class="zoomable-viewer__btn" (click)="zoomReset()" title="Reset zoom">⟲</button>
+    </div>
+    <small class="zoomable-viewer__hint">Ctrl+scroll to zoom</small>
+    <button *ngIf="showClose" type="button" class="zoomable-viewer__btn zoomable-viewer__btn--close" (click)="onClose()" title="Close">×</button>
+  </div>
+  <div class="zoomable-viewer__body" (wheel)="onWheel($event)">
+    <img
+      *ngIf="imageUrl"
+      [src]="imageUrl"
+      [alt]="alt"
+      class="zoomable-viewer__img"
+      [style.width.%]="zoom * 100"
+    />
+  </div>
+</div>

@@ -51,7 +51,7 @@ export class ApiService {
     engine = 'rapidocr',
     precision = '4',
     numRuns = 1,
-    structuringMode: 'regex_llm' | 'fuzzy' | 'hybrid' = 'hybrid'
+    structuringMode: 'regex_llm' | 'fuzzy' | 'hybrid' = 'fuzzy'
   ): Observable<{ task_id: string }> {
     return this.http.post<{ task_id: string }>(`${this.base}/task/send`, { 
       file_id: fileId, 

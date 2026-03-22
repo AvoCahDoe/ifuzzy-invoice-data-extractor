@@ -61,6 +61,9 @@ TARGETED_EXTRACTION_PROMPT_TEMPLATE = (
     "- customer_name: company that RECEIVES the invoice (BILL TO, Client, DESTINATAIRE)\n"
     "- payment_method: Cash, Card, Virement, Chèque, Bank transfer, etc.\n"
     "- line_items: array of {{description, quantity, unit_price, total_price}}. "
-    "EXCLUDE header and summary rows.\n\n"
+    "EXCLUDE header and summary rows.\n"
+    "- total_amount: grand total; 'Total Due', 'Grossworth', 'Net à payer', 'Amount due' mean total_amount.\n"
+    "- subtotal: before tax; 'Networth', 'Total HT', 'Subtotal' mean subtotal.\n"
+    "- tax_amount: VAT/tax amount only (numeric); 'VAT', 'Tax', 'Montant TVA'.\n\n"
     "OCR Text:\n\n{ctx}"
 )

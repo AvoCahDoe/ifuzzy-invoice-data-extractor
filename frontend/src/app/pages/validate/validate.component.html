@@ -10,26 +10,35 @@
       <aside class="preview-drawer">
         <div class="preview-header">
           <h3>Document Preview</h3>
+          <span class="click-hint" *ngIf="!previewLoading && previewImgUrl">Zoom: −/+ or Ctrl+scroll · Click image to expand</span>
+          <div *ngIf="!previewLoading && isPdf && previewPdfUrl" class="preview-header-actions">
+            <span class="click-hint">Scroll to read</span>
+            <button type="button" class="btn btn-small outline" (click)="openImageModal()">Expand</button>
+          </div>
         </div>
         <div class="preview-body">
           <div class="loading-container" *ngIf="previewLoading">
             <div class="spinner"></div>
             <p class="loading-text">Loading...</p>
           </div>
-          <img
-            *ngIf="!previewLoading && !isPdf && previewImgUrl"
-            [src]="previewImgUrl"
-            class="preview-media"
-            alt="Invoice"
-          />
-          <object
-            *ngIf="!previewLoading && isPdf && isBrowser && previewPdfUrl"
-            [data]="previewPdfUrl"
-            type="application/pdf"
-            class="preview-media"
-          >
-            <p>No PDF viewer available. <a [href]="previewPdfUrl" target="_blank">Download instead</a></p>
-          </object>
+          <!-- Image: zoomable viewer -->
+          <div *ngIf="!previewLoading && !isPdf && previewImgUrl" class="preview-zoom-wrapper" (click)="openImageModal()">
+            <zoomable-image-viewer
+              [imageUrl]="previewImgUrl"
+              alt="Invoice"
+              mode="inline"
+            />
+          </div>
+          <!-- PDF: embedded viewer -->
+          <div *ngIf="!previewLoading && isPdf && isBrowser && previewPdfUrl" class="preview-pdf-wrapper">
+            <object
+              [data]="previewPdfUrl"
+              type="application/pdf"
+              class="preview-pdf-embed"
+            >
+              <p class="preview-pdf-fallback">PDF preview not supported. <a [href]="previewPdfUrl" target="_blank" (click)="$event.stopPropagation()">Download PDF</a></p>
+            </object>
+          </div>
           <p *ngIf="!previewLoading && !previewImgUrl && !previewPdfUrl" class="preview-empty">
             No preview available.
           </p>
@@ -201,5 +210,31 @@
         {{ markdownContent || 'No Markdown content available yet.' }}
       </div>
     </aside>
+  </div>
+
+  <!-- Image zoom modal (click preview to open) -->
+  <div class="image-modal-backdrop" *ngIf="imageModalOpen" (click)="closeImageModal()">
+    <div class="image-modal" (click)="$event.stopPropagation()">
+      <zoomable-image-viewer
+        *ngIf="!isPdf && previewImgUrl"
+        [imageUrl]="previewImgUrl"
+        alt="Invoice"
+        mode="modal"
+        [showClose]="true"
+        (close)="closeImageModal()"
+      />
+      <div *ngIf="isPdf && isBrowser && previewPdfUrl" class="image-modal-pdf-wrapper">
+        <div class="image-modal-header">
+          <span>PDF Document</span>
+          <a [href]="previewPdfUrl" target="_blank" class="btn btn-small outline" (click)="$event.stopPropagation()">Download</a>
+          <button type="button" class="icon-btn close-btn" (click)="closeImageModal()" title="Close">×</button>
+        </div>
+        <div class="image-modal-pdf">
+          <object [data]="previewPdfUrl" type="application/pdf" class="pdf-object">
+            <p>PDF viewer not available. <a [href]="previewPdfUrl" target="_blank">Download PDF</a></p>
+          </object>
+        </div>
+      </div>
+    </div>
   </div>
 </div>

@@ -7,6 +7,7 @@ import {
   NgZone,
   ChangeDetectorRef,
   ApplicationRef,
+  HostListener,
 } from '@angular/core';
 import { CommonModule, isPlatformBrowser, DOCUMENT } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -14,11 +15,12 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../services/api.service';
 import { DomSanitizer, SafeResourceUrl, SafeUrl } from '@angular/platform-browser';
+import { ZoomableImageViewerComponent } from '../../components/zoomable-image-viewer/zoomable-image-viewer.component';
 
 @Component({
   standalone: true,
   selector: 'validate-page',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ZoomableImageViewerComponent],
   templateUrl: './validate.component.html',
   styleUrl: './validate.component.css',
 })
@@ -37,6 +39,8 @@ export class ValidatePage implements OnInit, OnDestroy {
   previewLoading = false;
   pollingId: any;
   private blobUrl: string | null = null;
+
+  imageModalOpen = false;
 
   // Tabs
   activeTab: 'input' | 'raw' | 'structured' = 'structured'; // Default to structured result as before
@@ -359,5 +363,18 @@ export class ValidatePage implements OnInit, OnDestroy {
 
   get validationWarningList(): string[] {
     return Object.values(this.validationWarnings);
+  }
+
+  openImageModal() {
+    this.imageModalOpen = true;
+  }
+
+  closeImageModal() {
+    this.imageModalOpen = false;
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape() {
+    if (this.imageModalOpen) this.closeImageModal();
   }
 }

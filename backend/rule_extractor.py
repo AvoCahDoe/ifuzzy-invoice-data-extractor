@@ -12,34 +12,56 @@ try:
 except ImportError:
     HAS_RAPIDFUZZ = False
 
-# Anchor patterns
+# Anchor patterns — spatial labels used to locate vendor/customer/payment blocks
+# Enriched for fuzzy matching across EN/FR/ES and OCR variations (no-space, typos)
 VENDOR_ANCHORS = [
-    "BILL FROM", "FROM:", "EMETTEUR", "Fournisseur", "Expéditeur", "Vendeur",
-    "Seller", "Vendor", "Supplier", "Sold by", "Issued by"
+    "BILL FROM", "FROM:", "EMETTEUR", "Émetteur", "Fournisseur", "Expéditeur", "Vendeur",
+    "Seller", "Vendor", "Supplier", "Sold by", "Issued by", "Issuer", "Provider", "Sender",
+    "Bill from", "From", "Vendedor", "Lieferant", "Fornitore", "Expediteur",
+    "Vendu a", "Sold To", "Sold a", "Facturé par", "Facture par",
+    "Service Provider", "From:", "Issuer:", "Billed From"
 ]
 CUSTOMER_ANCHORS = [
     "BILL TO", "TO:", "DESTINATAIRE", "Client", "Acheteur", "Buyer",
-    "Customer", "Bill to", "Ship to", "Livré à"
+    "Customer", "Bill to", "Ship to", "Livré à", "Recipient", "Purchaser",
+    "Ordered by", "Order for", "Billed to", "Deliver to", "Livraison à",
+    "À l'attention de", "Attention", "Destinatario", "Cliente",
+    "Client Information", "Livré a", "Vendu a",
+    "Ship To", "Deliver To", "Invoice To", "Facturé à", "Facture a",
+    "Bill To:", "To:", "Billed To"
 ]
 PAYMENT_ANCHORS = [
     "Payment", "Paiement", "Mode de paiement", "Règlement", "Payment method",
-    "Payment terms", "Méthode de paiement", "Paymentmethod", "Methode"
+    "Payment terms", "Méthode de paiement", "Paymentmethod", "Methode",
+    "Terms", "Settlement", "Moyen de paiement", "Mode de règlement",
+    "Payment mode", "Method of payment", "Paid by", "Payment by",
+    "Conditions de paiement", "Payment conditions", "Net 15", "Net 30",
+    "Payment details", "Paymentdetails", "Mode règlement", "Modalités de paiement",
+    "Termes de paiement", "Payment Info", "Pay by", "Paying by"
 ]
 LINE_ITEM_HEADER_ANCHORS = [
     "Description", "Désignation", "Qty", "Qté", "Quantity", "Unit Price",
-    "PU", "Prix unitaire", "Total", "Montant", "Amount"
+    "PU", "Prix unitaire", "Total", "Montant", "Amount", "Item", "Article",
+    "Service", "Libellé", "Product", "Hrs", "Hours", "Rate", "Networth",
+    "Gross worth", "SERVICE DESCRIPTION", "HOURS", "RATE", "AMOUNT"
 ]
 SUMMARY_KEYWORDS = [
-    "subtotal", "total", "tax", "tva", "net", "amount due", "balance",
-    "remise", "discount", "shipping", "frais", "gross"
+    "subtotal", "sub total", "s.total", "total", "tax", "tva", "net", "amount due", "balance",
+    "remise", "discount", "shipping", "frais", "gross", "grand total",
+    "total due", "net à payer", "total ttc", "total ht", "montant ttc",
+    "balance due", "vat", "taxable", "total amount", "net payable",
+    "hst", "gst", "pst", "iva", "sales tax", "invoice total",
+    "bill amount", "net total", "amount before tax", "pre-tax",
+    "shipping and handling", "shipping & handling", "handling"
 ]
 
-# Column header patterns for smart column detection
-_DESC_HEADERS  = ["description", "name", "nom", "designation", "désignation", "item", "article", "libelle", "libellé", "product", "produit", "service"]
-_QTY_HEADERS   = ["qty", "qté", "quantity", "quantite", "quantité", "qty/hrs", "hours", "hrs", "nb", "nbr", "nombre", "pieces", "pcs"]
-_PRICE_HEADERS = ["unit price", "unit_price", "unit price (mad)", "prix", "price", "pu", "prix unitaire", "netprice", "unit", "rate", "tarif"]
-_TOTAL_HEADERS = ["total", "total ht", "montant", "amount", "networth", "gross worth", "line total", "line total (mad)", "total(ht)", "total (ht)"]
-_POS_HEADERS   = ["pos", "no.", "no", "#", "num", "n°", "item no", "ref"]
+# Column header patterns for smart column detection (pipe tables)
+# Used to map table columns to desc/qty/price/total/pos roles
+_DESC_HEADERS  = ["description", "name", "nom", "designation", "désignation", "item", "article", "libelle", "libellé", "product", "produit", "service", "service description", "product name", "details", "détails", "col0"]
+_QTY_HEADERS   = ["qty", "qté", "qte", "quantity", "quantite", "quantité", "qty/hrs", "hours", "hrs", "nb", "nbr", "nombre", "pieces", "pcs", "units", "unités", "unit"]
+_PRICE_HEADERS = ["unit price", "unit_price", "unit price (mad)", "prix", "price", "pu", "prix unitaire", "netprice", "unit", "rate", "tarif", "price per unit", "net price", "prix unitaire"]
+_TOTAL_HEADERS = ["total", "total ht", "montant", "amount", "networth", "gross worth", "line total", "line total (mad)", "total(ht)", "total (ht)", "net amount", "montant net", "montant total", "line amount", "grossworth", "sub total", "subtotal", "ext. price", "ext price", "extended price", "extended", "amount (ht)", "total (ih)"]
+_POS_HEADERS   = ["pos", "no.", "no", "#", "num", "n°", "numero", "numéro", "item no", "ref", "index", "row"]
 
 
 def _fuzzy_match(text: str, patterns: list, threshold: float = 80) -> Optional[tuple]:
@@ -172,10 +194,27 @@ def _join_block_texts(blocks: list, max_blocks: int = 5) -> str:
     return " ".join((b.get("text") or "").strip() for b in blocks[:max_blocks]).strip()
 
 
+def _is_valid_payment_candidate(text: str) -> bool:
+    """Reject payment candidates that look like price fields, bill amount labels, or are too long."""
+    if not text or len(text) > 50:
+        return False
+    # Reject pure numbers
+    if re.match(r'^[\d.,\s]+$', text):
+        return False
+    # Reject strings that look like "Label: $Value" or contain currency amounts
+    if re.search(r'(?i)(?:bill\s*amount|total\s*amount|invoice\s*total|grand\s*total|amount\s*due|balance\s*due)', text):
+        return False
+    if re.search(r'[$€£]\s*[\d,]+', text):
+        return False
+    if re.search(r'[\d,\.]+\s*(MAD|EUR|USD|GBP|CAD|CHF)\b', text, re.I):
+        return False
+    return True
+
+
 def _extract_payment_from_markdown(md: str) -> Optional[str]:
     """Try to extract payment method from markdown text using regex."""
     m = re.search(
-        r'(?i)(?:payment\s*method|methode|paiement|mode\s*de\s*paiement|paymentmethod|methode\s*:|payment\s*:)\s*[:\-]?\s*([A-Za-z /]+)',
+        r'(?i)(?:payment\s*method|methode|paiement|mode\s*de\s*paiement|paymentmethod|methode\s*:|payment\s*:|terms\s*:|conditions?\s*de\s*paiement|payment\s*terms|règlement)\s*[:\-]?\s*([A-Za-z0-9 /\-]+)',
         md
     )
     if m:
@@ -189,7 +228,7 @@ def _extract_payment_from_markdown(md: str) -> Optional[str]:
 def _extract_customer_from_markdown(md: str) -> Optional[str]:
     """Try to extract customer from 'Client:' or 'Bill to:' labels in markdown text."""
     m = re.search(
-        r'(?i)(?:bill\s*to|client\s*:|acheteur\s*:|destinataire\s*:)\s*([A-Za-zÀ-ÿ0-9 &,.\-]+)',
+        r'(?i)(?:bill\s*to|billed\s*to|client\s*:|acheteur\s*:|destinataire\s*:|ship\s*to|deliver\s*to|ordered\s*by|recipient\s*:)\s*([A-Za-zÀ-ÿ0-9 &,.\-]+)',
         md
     )
     if m:
@@ -272,7 +311,9 @@ def extract_fields_rulebased(blocks: list, markdown: str) -> dict:
             below = _blocks_below(idx, blocks, max_rel_height=0.08)
             first = _first_non_anchor(below, VENDOR_ANCHORS + CUSTOMER_ANCHORS + LINE_ITEM_HEADER_ANCHORS)
             if first:
-                out["payment_method"] = (first.get("text") or "").strip()
+                candidate = (first.get("text") or "").strip()
+                if _is_valid_payment_candidate(candidate):
+                    out["payment_method"] = candidate
             else:
                 # Check right of anchor (same line)
                 bx0, by0, bx1, by1 = _block_bbox(blk)
@@ -282,8 +323,7 @@ def extract_fields_rulebased(blocks: list, markdown: str) -> dict:
                     ox0, oy0, ox1, oy1 = _block_bbox(ob)
                     if abs(oy0 - by0) < 20 and ox0 >= bx1 - 10:
                         candidate = (ob.get("text") or "").strip()
-                        # Sanity check: not a number, not too long
-                        if candidate and not re.match(r'^[\d.,]+$', candidate) and len(candidate) < 40:
+                        if _is_valid_payment_candidate(candidate):
                             out["payment_method"] = candidate
                         break
             break
@@ -429,13 +469,13 @@ def _parse_line_items_from_freetext(md: str) -> list:
     for idx in range(max(0, len(lines) - 1)):
         window = " ".join(lines[idx:idx + 5]).lower()
         hits = 0
-        if re.search(r'\b(description|service|designation|désignation|item)\b', window):
+        if re.search(r'\b(description|service|designation|désignation|item|article|libell[eé]|product)\b', window):
             hits += 1
-        if re.search(r'\b(qty|quantit[eé]|quantity|hours?|hrs?)\b', window):
+        if re.search(r'\b(qty|quantit[eé]|quantity|hours?|hrs?|units?|pieces?|pcs?)\b', window):
             hits += 1
-        if re.search(r'\b(rate|price|unit price|prix)\b', window):
+        if re.search(r'\b(rate|price|unit price|prix|pu|tarif|netprice)\b', window):
             hits += 1
-        if re.search(r'\b(amount|total|montant)\b', window):
+        if re.search(r'\b(amount|total|montant|networth|line total)\b', window):
             hits += 1
         if hits >= 2:
             start_idx = min(len(lines), idx + 4)
