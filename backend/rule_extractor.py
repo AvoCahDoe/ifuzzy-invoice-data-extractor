@@ -5,6 +5,8 @@ without using an LLM.
 """
 import re
 from typing import Optional
+from sklearn.cluster import DBSCAN
+import numpy as np
 
 try:
     from rapidfuzz import fuzz
@@ -178,6 +180,39 @@ def _blocks_below(anchor_idx: int, blocks: list, max_rel_height: float = 0.25) -
     return out
 
 
+def reconstruct_table_dbscan(blocks: list, header_y: float, footer_y: float, eps: float = 12.0) -> list:
+    """
+    Cluster table bounding boxes into horizontal rows using DBSCAN on Y-axis centers.
+    """
+    # 1. Isolate text blocks in the table area
+    table_blocks = [b for b in blocks if header_y < _block_cy(b) < footer_y]
+    if not table_blocks:
+        return []
+
+    # 2. Extract Y-centers
+    y_centers = np.array([_block_cy(b) for b in table_blocks]).reshape(-1, 1)
+
+    # 3. Cluster using DBSCAN
+    clustering = DBSCAN(eps=eps, min_samples=1).fit(y_centers)
+    labels = clustering.labels_
+
+    # 4. Group by cluster and sort by X-center
+    rows_dict = {}
+    for i, label in enumerate(labels):
+        if label not in rows_dict:
+            rows_dict[label] = []
+        rows_dict[label].append(table_blocks[i])
+
+    rows = []
+    for label, row_blocks in rows_dict.items():
+        row_blocks.sort(key=_block_cx)
+        rows.append(row_blocks)
+
+    # Sort rows top-to-bottom
+    rows.sort(key=lambda r: sum(_block_cy(b) for b in r) / len(r))
+    return rows
+
+
 def _first_non_anchor(blocks: list, exclude_anchors: list) -> Optional[dict]:
     """First block whose text is not an anchor label."""
     for b in blocks:
@@ -344,8 +379,61 @@ def extract_fields_rulebased(blocks: list, markdown: str) -> dict:
         if t and len(t) > 2 and not t.lower().startswith(bad_starts):
             out["vendor_name"] = t
 
-    # Line items from markdown pipe tables
-    out["line_items"] = _parse_line_items_from_markdown(markdown or "")
+    # Line items: try DBSCAN first, fallback to markdown pipe tables
+    dbscan_items = []
+    if blocks:
+        # Find header Y bounds
+        header_y = None
+        for blk in blocks:
+            if _fuzzy_match(blk.get("text", ""), LINE_ITEM_HEADER_ANCHORS, 80):
+                header_y = _block_cy(blk) - 15  # a bit above the center
+                break
+
+        # Find footer Y bounds
+        footer_y = 99999.0
+        if header_y:
+            below_header = [b for b in blocks if _block_cy(b) > header_y + 30]
+            for blk in below_header:
+                if any(kw in (blk.get("text", "").lower()) for kw in SUMMARY_KEYWORDS):
+                    footer_y = _block_cy(blk) - 5
+                    break
+
+        if header_y and footer_y != 99999.0:
+            rows = reconstruct_table_dbscan(blocks, header_y, footer_y, eps=12.0)
+            
+            # Simple heuristic row-to-item extraction from clustered blocks
+            for row in rows:
+                if len(row) < 2:
+                    continue
+                    
+                texts = [(b.get("text") or "").strip() for b in row]
+                row_str = " | ".join(texts)
+                
+                # Check if this row looks like a summary/subtotal row
+                if any(kw in row_str.lower() for kw in SUMMARY_KEYWORDS):
+                    continue
+                    
+                desc = texts[0]
+                # Look for numbers from right to left (Total, Unit Price, Qty)
+                numbers = []
+                for t in reversed(texts[1:]):
+                    num = _parse_num_clean(t)
+                    if num is not None:
+                        numbers.append(num)
+                        
+                if len(numbers) >= 2:
+                    # Assumes standard layout [desc, ..., qty/price, total]
+                    dbscan_items.append({
+                        "description": desc,
+                        "quantity": numbers[-1] if len(numbers) >= 3 else 1,
+                        "unit_price": numbers[1],
+                        "total_price": numbers[0]
+                    })
+                    
+    if dbscan_items:
+        out["line_items"] = dbscan_items
+    else:
+        out["line_items"] = _parse_line_items_from_markdown(markdown or "")
 
     # Fuzzy match score
     out["_fuzzy_match_score"] = sum(fuzzy_scores) / len(fuzzy_scores) if fuzzy_scores else 0.5

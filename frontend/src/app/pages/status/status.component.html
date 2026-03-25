@@ -34,7 +34,6 @@
             <th class="th-name">Invoice</th>
             <th class="th-type">Input</th>
             <th class="th-type">Compute</th>
-            <th class="th-type">Mode</th>
             <th class="th-num">Items</th>
             <th class="th-num">OCR</th>
             <th class="th-num">Struct</th>
@@ -57,9 +56,7 @@
             <td class="type-cell"><span class="pill pill--type">{{ r.inputType || '—' }}</span></td>
             <td class="type-cell">
               <span class="engine-name">{{ r.engine || '—' }}</span>
-              <span class="engine-precision" *ngIf="r.precisionName">{{ r.precisionName }}</span>
             </td>
-            <td class="type-cell"><span class="mode-name">{{ modeLabel(r.structuring_mode) }}</span></td>
             <td class="num-cell">{{ r.line_items_count ?? 0 }}</td>
 
             <td class="num-cell">
@@ -91,7 +88,6 @@
                 </div>
                 <div class="sub-scores">
                   <span [ngClass]="scoreClass(r.score_viz)" title="Visual">V{{ formatScore(r.score_viz) }}</span>
-                  <span [ngClass]="scoreClass(r.score_sem)" title="Semantic">S{{ formatScore(r.score_sem) }}</span>
                   <span [ngClass]="scoreClass(r.score_log)" title="Logic">L{{ formatScore(r.score_log) }}</span>
                 </div>
               </div>

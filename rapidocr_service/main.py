@@ -199,33 +199,45 @@ table_engine = RapidTable(RapidTableInput(model_type=ModelType.PPSTRUCTURE_EN))
 
 # Wrapper to bridge API mismatch: rapid_table v3 expects an object with boxes/txts/scores
 # but rapidocr_onnxruntime v1.4.x returns a tuple (result_list, elapsed)
+# Bridge adapter: rapid_table expects an object with specific attributes (boxes, txts, scores)
+# but rapidocr_onnxruntime returns a raw tuple. This wrapper formats the results correctly.
 class OcrWrapper:
     def __init__(self, engine):
         self.engine = engine
     def __call__(self, img):
+        # Run actual OCR on the image
         res = self.engine(img)
         class OcrResObj: pass
         obj = OcrResObj()
+        # Handle cases where OCR finds nothing
         if not res or not res[0]:
             obj.boxes = None
             return obj
+        
+        # Reorganize raw [bbox, text, score] items into separate lists
         boxes, txts, scores = [], [], []
         for item in res[0]:
             if len(item) == 3:
                 boxes.append(item[0])
                 txts.append(item[1])
                 scores.append(item[2])
+        
+        # Convert to NumPy array for compatibility with rapid_table
         obj.boxes = np.array(boxes)
         obj.txts = txts
         obj.scores = scores
         return obj
 
+# Inject wrapper into the table engine so it can read text inside tables correctly
 table_engine.ocr_engine = OcrWrapper(ocr_engine)
 
 def run_onnx_ocr(images: list) -> tuple[str, list[float], list[dict]]:
     """
     Hybrid ONNX pipeline per page using masking to prevent text duplication.
-    Returns (markdown_text, all_confidences, all_blocks) where blocks have text, bbox, confidence, page_num.
+    1. Finds tables with Layout engine.
+    2. Extracts structured tables into Markdown.
+    3. Masks (whites out) table areas so general OCR ignores them.
+    4. Runs general OCR on remaining text.
     """
     all_sections: list[str] = []
     all_confidences: list[float] = []
@@ -235,12 +247,14 @@ def run_onnx_ocr(images: list) -> tuple[str, list[float], list[dict]]:
         if len(images) > 1:
             all_sections.append(f"\n---\n*Page {page_num + 1}*\n")
 
+        # Convert PIL to NumPy array for AI engines
         img_array = np.array(pil_img)
         page_sections: list[str] = []
 
         # ── 1. Layout detection ────────────────────────────────────────────
-        layout_boxes = []      # [[x1,y1,x2,y2], ...]
-        layout_classes = []    # ['table', 'text', ...]
+        # Finds regions like 'table', 'text', 'figure', etc.
+        layout_boxes = []      
+        layout_classes = []    
         layout_scores = []
 
         try:
@@ -254,11 +268,13 @@ def run_onnx_ocr(images: list) -> tuple[str, list[float], list[dict]]:
             print(f"[layout] page {page_num + 1} failed: {e}")
 
         # ── 2. Process Tables & Mask Regions ───────────────────────────────
+        # Create a copy to mask out tables so the final OCR doesn't double-process them
         img_for_ocr = img_array.copy()
 
         if layout_boxes:
             for idx, (bbox, cat) in enumerate(zip(layout_boxes, layout_classes)):
                 if "table" in cat.lower():
+                    # Get integer coordinates and clamp to image bounds
                     x1, y1, x2, y2 = (int(v) for v in bbox[:4])
                     x1, y1 = max(0, x1), max(0, y1)
                     x2, y2 = min(img_array.shape[1], x2), min(img_array.shape[0], y2)
@@ -266,7 +282,7 @@ def run_onnx_ocr(images: list) -> tuple[str, list[float], list[dict]]:
                     if idx < len(layout_scores):
                         all_confidences.append(float(layout_scores[idx]))
 
-                    # Table Structure Recognition → Markdown pipe-table
+                    # Table content recognition -> Convert HTML result to Markdown Pipe-Table
                     try:
                         crop_array = img_array[y1:y2, x1:x2]
                         table_res = table_engine(crop_array)
@@ -279,11 +295,13 @@ def run_onnx_ocr(images: list) -> tuple[str, list[float], list[dict]]:
                     except Exception as e:
                         print(f"[table] region ({cat}) failed: {e}")
 
+                    # MASKING: Paint table region white so general OCR ignores it
                     img_for_ocr[y1:y2, x1:x2] = 255
 
-        # ── 3. Full-page OCR on the remaining content ─────────────────────
+        # ── 3. Full-page OCR on the remaining (non-table) content ──────────────────
         try:
             ocr_result = ocr_engine(img_for_ocr)
+            # Group scattered snippets into horizontal lines
             lines, confs, page_blocks = _extract_ocr_lines(ocr_result)
             if lines:
                 page_sections.append("\n".join(lines))
@@ -411,7 +429,6 @@ def _extract_ocr_lines(ocr_result, min_score: float = 0.4) -> tuple[list[str], l
 def convert(
     file: UploadFile = File(...),
     force_ocr: bool = Form(False),
-    use_llm: bool = Form(False),
 ):
     temp_file_path = None
     try:

@@ -18,21 +18,8 @@ export class UploadPage {
   showModal = false;
   lastFileId: string | null = null;
   selectedEngine = 'rapidocr';
-  selectedPrecision = '4';
-  selectedStructMode: 'regex_llm' | 'fuzzy' | 'hybrid' = 'fuzzy';
 
   constructor(private api: ApiService, private router: Router) {}
-
-  get showPrecisionSelector(): boolean {
-    return this.selectedStructMode !== 'fuzzy';
-  }
-
-  setStructuringMode(mode: 'regex_llm' | 'fuzzy' | 'hybrid') {
-    this.selectedStructMode = mode;
-    if (mode === 'fuzzy') {
-      this.selectedPrecision = '4';
-    }
-  }
 
   triggerFileInput() {
     const input = document.getElementById('file-upload') as HTMLInputElement | null;
@@ -74,7 +61,7 @@ export class UploadPage {
       this.selectedFile = null;
       this.clearFileInput();
 
-      this.api.sendTask(fileId, false, true, this.selectedEngine, this.selectedPrecision, 1, this.selectedStructMode).subscribe({
+      this.api.sendTask(fileId, false, true, this.selectedEngine).subscribe({
         next: () => {},
         error: () => {}
       });

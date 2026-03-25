@@ -25,58 +25,6 @@
     </label>
 
     <div class="upload-controls">
-      <div class="mode-header">
-        <h4>Structuring Mode</h4>
-        <span>CPU-optimized options</span>
-      </div>
-
-      <div class="mode-grid">
-        <button
-          type="button"
-          class="mode-card"
-          [class.active]="selectedStructMode === 'regex_llm'"
-          [disabled]="uploading"
-          (click)="setStructuringMode('regex_llm')"
-        >
-          <div class="mode-title">Regex + LLM</div>
-          <div class="mode-desc">Best extraction quality. Regex captures obvious fields, LLM completes names and line items.</div>
-        </button>
-        <button
-          type="button"
-          class="mode-card"
-          [class.active]="selectedStructMode === 'fuzzy'"
-          [disabled]="uploading"
-          (click)="setStructuringMode('fuzzy')"
-        >
-          <div class="mode-title">Fuzzy Search</div>
-          <div class="mode-desc">Fastest CPU mode. Regex + fuzzy anchors + rigid item parsing, no LLM call.</div>
-        </button>
-        <button
-          type="button"
-          class="mode-card"
-          [class.active]="selectedStructMode === 'hybrid'"
-          [disabled]="uploading"
-          (click)="setStructuringMode('hybrid')"
-        >
-          <div class="mode-title">Hybrid</div>
-          <div class="mode-desc">Balanced mode. Fuzzy extraction first, LLM only fills missing fields.</div>
-        </button>
-      </div>
-
-      <div class="settings-row" *ngIf="showPrecisionSelector">
-        <div class="field">
-          <label>LLM Precision</label>
-          <select [(ngModel)]="selectedPrecision" [disabled]="uploading" class="select">
-            <option value="4">4-bit (Fast, Default)</option>
-            <option value="5">5-bit (Balanced)</option>
-            <option value="8">8-bit (High)</option>
-            <option value="16">F16 (Full)</option>
-            <option value="350m">350M (Efficient)</option>
-            <option value="all">Run All Models</option>
-          </select>
-        </div>
-      </div>
-
       <div class="settings-row static-info">
         <div class="field readonly">
           <label>OCR Engine</label>
@@ -108,7 +56,6 @@
       </div>
     </div>
   </div>
-</div>
 
 <div class="pipeline-diagram">
   <h3>How processing works</h3>
@@ -136,16 +83,5 @@
         Extract vendor, customer, totals &amp; items
       </div>
     </div>
-    <div class="pipeline-arrow">→</div>
-    <div class="pipeline-step">
-      <div class="step-title">4. LLM (optional)</div>
-      <div class="step-body">
-        Only if needed, on reduced text<br />
-        350M or 1.2B model on CPU
-      </div>
-    </div>
   </div>
-  <p class="pipeline-footnote">
-    Fuzzy mode runs steps 1-3 only. Regex + LLM and Hybrid use CPU llama.cpp for step 4.
-  </p>
 </div>

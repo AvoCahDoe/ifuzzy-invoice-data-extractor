@@ -48,19 +48,13 @@ export class ApiService {
     fileId: string,
     force_ocr = false,
     structure_after = true,
-    engine = 'rapidocr',
-    precision = '4',
-    numRuns = 1,
-    structuringMode: 'regex_llm' | 'fuzzy' | 'hybrid' = 'fuzzy'
+    engine = 'rapidocr'
   ): Observable<{ task_id: string }> {
     return this.http.post<{ task_id: string }>(`${this.base}/task/send`, { 
       file_id: fileId, 
       force_ocr, 
       do_structure: structure_after,
-      engine,
-      precision,
-      num_runs: numRuns,
-      structuring_mode: structuringMode
+      engine
     });
   }
 

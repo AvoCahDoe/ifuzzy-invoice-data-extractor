@@ -96,11 +96,6 @@
               </ul>
             </div>
 
-            <div *ngIf="llmRawJson" class="llm-preview-box">
-              <h4>LLM Raw Output (before merge)</h4>
-              <pre class="llm-preview-code">{{ llmRawJson }}</pre>
-            </div>
-
             <div class="fields-grid">
               <div class="field" [class.error]="validationErrors['vendor_name']">
                 <label>Vendor Name <span class="required">*</span></label>

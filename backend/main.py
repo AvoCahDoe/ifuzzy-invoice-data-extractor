@@ -15,10 +15,6 @@ from pymongo import MongoClient
 import gridfs
 import unicodedata
 import base64
-from prompts import (
-    SYSTEM_PROMPT, EXTRACTION_PROMPT_TEMPLATE, SMALL_MODEL_SYSTEM_PROMPT,
-    TARGETED_SYSTEM_PROMPT, TARGETED_EXTRACTION_PROMPT_TEMPLATE,
-)
 from rule_extractor import extract_fields_rulebased
 
 # Setup logging
@@ -38,18 +34,6 @@ app.add_middleware(
 
 # Service URL from Docker Compose (RapidOCR is the only extraction engine)
 RAPIDOCR_SERVICE_URL = os.getenv("RAPIDOCR_SERVICE_URL", "http://rapidocr_service:8005")
-
-LLAMA_CPP_HOST = os.getenv("LLAMA_CPP_HOST", "http://llamacpp:8080/v1")
-# Base URL for llama-server. We will change the port dynamically.
-LLAMA_CPP_BASE = LLAMA_CPP_HOST.split(":80")[0] # e.g. http://llamacpp
-
-PRECISION_PORTS = {
-    "4":    "8081",
-    "5":    "8082",
-    "8":    "8080",
-    "16":   "8083",
-    "350m": "8084"
-}
 
 ENGINE_URLS = {
     "rapidocr": RAPIDOCR_SERVICE_URL,
@@ -470,128 +454,7 @@ def _filter_line_items(items: list, total_amount=None) -> list:
     return filtered
 
 
-_LLM_TARGET_FIELDS = ["vendor_name", "vendor_address", "customer_name", "payment_method", "line_items"]
 
-
-def _compute_extraction_completeness(rule_output: dict, hardcoded: dict, fuzzy_score: float) -> dict:
-    """
-    Decide whether the LLM is needed after Phase 1 (rule-based + regex).
-    Returns {complete: bool, missing_fields: [str], confidence: float}.
-    """
-    merged = dict(hardcoded)
-    merged.update({k: v for k, v in rule_output.items() if v is not None and k != "_fuzzy_match_score"})
-    if rule_output.get("line_items"):
-        merged["line_items"] = rule_output["line_items"]
-
-    missing = []
-    for f in _LLM_TARGET_FIELDS:
-        val = merged.get(f)
-        if f == "line_items":
-            if not val:
-                missing.append(f)
-        elif not val or (isinstance(val, str) and len(val.strip()) < 2):
-            missing.append(f)
-
-    # vendor_address is optional — don't require it for completeness
-    core_missing = [f for f in missing if f != "vendor_address"]
-
-    complete = len(core_missing) == 0 and fuzzy_score >= 0.65
-    confidence = fuzzy_score if not missing else fuzzy_score * (1 - len(core_missing) / len(_LLM_TARGET_FIELDS))
-
-    return {"complete": complete, "missing_fields": missing, "confidence": confidence}
-
-
-def _build_reduced_context(raw_md: str, has_line_items: bool) -> str:
-    """
-    Strip already-extracted sections from OCR markdown to reduce LLM input tokens.
-    - If line_items already parsed: strip the markdown table
-    - Strip footer/legal text (bank details, legal notices)
-    - Keep header/address region intact
-    """
-    lines = raw_md.split("\n")
-    kept = []
-    in_table = False
-    table_stripped = False
-
-    # Patterns for footer/legal/bank text to strip
-    _FOOTER_PATTERNS = re.compile(
-        r'(?i)(?:RIB|BIC|IBAN|Banque|Credit Agricole|Arret[eé]\s*la\s*pr[eé]sente|'
-        r'N[°°]\s*d\'agrement|www\.|http|Email:|T[eé]l[eé]phone|Adresse:|'
-        r'^\d+/\d+$)',  # page numbers like 1/1
-    )
-
-    for line in lines:
-        stripped = line.strip()
-
-        # Detect table rows (pipe-delimited)
-        if "|" in stripped and has_line_items:
-            if re.match(r"^[\|\-:\s]+$", stripped):
-                in_table = True
-                table_stripped = True
-                continue
-            if in_table or (not table_stripped and re.search(r'\|.*\|.*\|', stripped)):
-                in_table = True
-                continue
-        else:
-            if in_table:
-                in_table = False
-
-        # Strip footer/legal/bank lines
-        if _FOOTER_PATTERNS.search(stripped):
-            continue
-
-        kept.append(line)
-
-    result = "\n".join(kept).strip()
-
-    # If stripping left too little context, LLM would have nothing to work with → use full text
-    min_ctx = 400
-    if len(result) < min_ctx:
-        result = (raw_md[:4000] + "\n...[truncated]" if len(raw_md) > 4000 else raw_md).strip()
-
-    # Hard cap at 4000 chars to keep LLM fast on CPU
-    if len(result) > 4000:
-        result = result[:4000] + "\n...[truncated]"
-
-    return result
-
-
-def extract_json_from_llm(content: str) -> dict:
-    """Robustly extract JSON from LLM output (handles markdown fences, stray text, truncation)."""
-    if not content or not isinstance(content, str):
-        return {}
-    content = content.strip()
-    # 1. Direct parse (and try with trailing-comma fix)
-    for raw in (content, _fix_trailing_comma(content)):
-        try:
-            out = json.loads(raw)
-            if isinstance(out, dict):
-                return out
-        except json.JSONDecodeError:
-            pass
-    # 2. Markdown code fence
-    match = re.search(r"```(?:json)?\s*(\{[^`]*\})\s*```", content, re.DOTALL)
-    if match:
-        try:
-            return json.loads(_fix_trailing_comma(match.group(1)))
-        except Exception:
-            pass
-    # 3. Largest {...} block between first { and last }
-    start = content.find('{')
-    end = content.rfind('}')
-    if start != -1 and end != -1:
-        try:
-            return json.loads(_fix_trailing_comma(content[start:end+1]))
-        except Exception:
-            pass
-    return {}
-
-
-def _fix_trailing_comma(s: str) -> str:
-    """Remove trailing commas before ] or } to fix common LLM JSON mistakes."""
-    if not s:
-        return s
-    return re.sub(r',\s*([}\]])', r'\1', s)
 
 def calculate_logic_score(data: dict) -> float:
     """
@@ -694,7 +557,7 @@ async def call_extraction_service(engine: str, filename: str, file_content: byte
         raise ValueError(f"Unknown engine: {engine}. Valid: {list(ENGINE_URLS)}")
 
     files = {"file": (filename, file_content, "application/octet-stream")}
-    data  = {"force_ocr": "false", "use_llm": "false"}
+    data  = {"force_ocr": "false"}
 
     # Retry logic for connection issues (common during service cold starts)
     max_retries = 30
@@ -731,59 +594,35 @@ async def task_send(payload: dict = Body(...)):
         - `file_id` (str, required): ID returned by `/upload`.
         - `engine` (str, optional): OCR engine, default `rapidocr`.
         - `do_structure` (bool, optional): whether to run structuring.
-        - `precision` (str|int, optional): LLM precision preset (`4`, `5`, `8`, `16`, `350m`, or `"all"`).
-        - `num_runs` (int, optional): number of repeated runs for the same model.
-        - `structuring_mode` (str, optional): `"regex_llm"`, `"fuzzy"`, or `"hybrid"`.
 
     Returns
     -------
     dict
-        - If a single task is created: `{ "task_id": <id>, "status": "queued" }`.
-        - If multiple tasks are created (all models / multi‑run):
-          `{ "task_ids": [...], "status": "queued_all" }`.
+        `{ "task_id": <id>, "status": "queued" }`.
     """
     file_id    = payload.get("file_id")
     engine     = payload.get("engine", "rapidocr")
     do_structure = payload.get("do_structure", True)
-    precision  = str(payload.get("precision", "4"))
-    num_runs   = int(payload.get("num_runs", 1))
-    structuring_mode = str(payload.get("structuring_mode", "hybrid"))
 
-    # Cap runs at 10 for safety
-    num_runs = max(1, min(10, num_runs))
+    tid = str(uuid.uuid4())
+    tasks_col.insert_one({
+        "_id": tid,
+        "file_id": file_id,
+        "status": "queued",
+        "engine": engine,
+        "structuring_mode": "fuzzy",
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+    })
+    task_queue.put_nowait({
+        "task_id": tid,
+        "file_id": file_id,
+        "engine": engine,
+        "do_structure": do_structure,
+        "structuring_mode": "fuzzy"
+    })
 
-    # Support for "All Models" comparison
-    precisions_to_run = [precision]
-    if precision == "all":
-        precisions_to_run = ["4", "5", "8", "16", "350m"]
-
-    task_ids = []
-    for p in precisions_to_run:
-        for _ in range(num_runs):
-            tid = str(uuid.uuid4())
-            tasks_col.insert_one({
-                "_id": tid,
-                "file_id": file_id,
-                "status": "queued",
-                "engine": engine,
-                "precision": p,
-                "structuring_mode": structuring_mode,
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat(),
-            })
-            task_queue.put_nowait({
-                "task_id": tid,
-                "file_id": file_id,
-                "engine": engine,
-                "do_structure": do_structure,
-                "precision": p,
-                "structuring_mode": structuring_mode
-            })
-            task_ids.append(tid)
-
-    if precision == "all" or num_runs > 1:
-        return {"task_ids": task_ids, "status": "queued_all"}
-    return {"task_id": task_ids[0], "status": "queued"}
+    return {"task_id": tid, "status": "queued"}
 
 async def worker():
     """
@@ -805,10 +644,8 @@ async def worker():
             await run_task(
                 item["task_id"],
                 item["file_id"],
-                item["engine"],
-                item["do_structure"],
-                item["precision"],
-                item.get("structuring_mode", "hybrid")
+                item.get("engine", "rapidocr"),
+                item["do_structure"]
             )
         except Exception as e:
             logger.error(f"Worker error processing task {item['task_id']}: {e}")
@@ -827,7 +664,7 @@ async def startup_event():
     """
     asyncio.create_task(worker())
 
-async def run_task(task_id, file_id, engine, do_structure, precision="4", structuring_mode="hybrid"):
+async def run_task(task_id, file_id, engine, do_structure):
     """
     End‑to‑end pipeline for a single extraction+structuring task.
 
@@ -835,7 +672,7 @@ async def run_task(task_id, file_id, engine, do_structure, precision="4", struct
     1. Loads the file from GridFS.
     2. Calls the OCR service (RapidOCR) to produce markdown and blocks.
     3. Writes OCR artifacts to `processed_output/`.
-    4. Optionally runs structuring (regex + rules + optional LLM).
+    4. Optionally runs structuring (fuzzy rules only).
     5. Computes confidence scores and stores results in MongoDB.
 
     Parameters
@@ -849,14 +686,6 @@ async def run_task(task_id, file_id, engine, do_structure, precision="4", struct
     do_structure : bool
         Whether to run structuring after OCR. When `False`, only OCR
         artifacts are saved and the task stops after extraction.
-    precision : str, optional
-        LLM precision preset controlling which llama.cpp port / model
-        is used (see `PRECISION_PORTS`).
-    structuring_mode : str, optional
-        Structuring strategy:
-        - `"regex_llm"`: regex‑only Phase 1 then full LLM.
-        - `"fuzzy"`: rule‑based only (no LLM).
-        - `"hybrid"`: fuzzy rules first, LLM only for missing fields.
 
     Returns
     -------
@@ -954,35 +783,18 @@ async def run_task(task_id, file_id, engine, do_structure, precision="4", struct
             raw_ctx = cleaned_md
             hardcoded = extract_fields_hardcoded(raw_ctx)
             start_struct = time.time()
-            mode_alias = {"llm": "hybrid", "rules": "fuzzy", "rules_only": "fuzzy"}
-            effective_mode = mode_alias.get((structuring_mode or "").strip().lower(), (structuring_mode or "").strip().lower())
-            if effective_mode not in {"regex_llm", "fuzzy", "hybrid"}:
-                effective_mode = "hybrid"
 
             blocks = extract_data.get("blocks", [])
-            rule_output = {}
-            fuzzy_score = 0.5
-            llm_raw_output = None
-            semantic_score = 0.5
-            model_name = "rule-based"
+            model_name = "fuzzy-rule-based"
 
-            # Phase 1 depends on the selected mode
-            if effective_mode in {"fuzzy", "hybrid"}:
-                await update_task_status(task_id, "structuring_phase1_fuzzy")
-                rule_output = extract_fields_rulebased(blocks, raw_ctx)
-                fuzzy_score = rule_output.pop("_fuzzy_match_score", 0.5)
-                structured_data = dict(hardcoded)
-                structured_data.update({k: v for k, v in rule_output.items() if v is not None})
-                if rule_output.get("line_items"):
-                    structured_data["line_items"] = rule_output["line_items"]
-                semantic_score = fuzzy_score
-                model_name = "fuzzy-rule-based"
-            else:
-                await update_task_status(task_id, "structuring_phase1_regex")
-                structured_data = dict(hardcoded)
-                structured_data["line_items"] = []
-                semantic_score = 0.55
-                model_name = "regex-only"
+            await update_task_status(task_id, "structuring_fuzzy")
+            rule_output = extract_fields_rulebased(blocks, raw_ctx)
+            fuzzy_score = rule_output.pop("_fuzzy_match_score", 0.5)
+            
+            structured_data = dict(hardcoded)
+            structured_data.update({k: v for k, v in rule_output.items() if v is not None})
+            if rule_output.get("line_items"):
+                structured_data["line_items"] = rule_output["line_items"]
 
             # Normalize line-item numbers from Phase 1
             for li in structured_data.get("line_items", []):
@@ -993,160 +805,9 @@ async def run_task(task_id, file_id, engine, do_structure, precision="4", struct
                 structured_data.get("line_items", []), structured_data.get("total_amount")
             )
 
-            phase1_ms = round((time.time() - start_struct) * 1000)
-            logger.info(f"Phase 1 complete in {phase1_ms}ms | mode={effective_mode} | fuzzy={fuzzy_score:.2f}")
-
-            async def run_llm_phase(missing_fields: list[str], llm_ctx: str, mode_prefix: str = "hybrid"):
-                nonlocal semantic_score, model_name, llm_raw_output, structured_data
-                if not missing_fields:
-                    return
-
-                await update_task_status(task_id, "structuring_phase2_llm")
-                logger.info(f"Phase 2 LLM ({mode_prefix}) for fields: {missing_fields}")
-
-                pre_known = {}
-                for f in _LLM_TARGET_FIELDS:
-                    val = structured_data.get(f)
-                    if f == "line_items":
-                        if val:
-                            pre_known[f] = f"[{len(val)} items already extracted]"
-                    elif val and isinstance(val, str) and len(val.strip()) >= 2:
-                        pre_known[f] = val
-                pre_extracted_str = json.dumps(pre_known, ensure_ascii=False, indent=2)
-
-                targeted_props = {}
-                for f in missing_fields:
-                    if f == "line_items":
-                        targeted_props["line_items"] = {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "description": {"type": "string"},
-                                    "quantity": {"type": ["number", "null"]},
-                                    "unit_price": {"type": ["number", "null"]},
-                                    "total_price": {"type": ["number", "null"]},
-                                },
-                                "additionalProperties": False,
-                            },
-                        }
-                    else:
-                        targeted_props[f] = {"type": ["string", "null"]}
-
-                targeted_schema = {
-                    "type": "object",
-                    "properties": targeted_props,
-                    "required": [],
-                    "additionalProperties": False,
-                }
-
-                simple_fields = [f for f in missing_fields if f != "line_items"]
-                use_small = (
-                    mode_prefix == "hybrid"
-                    and len(missing_fields) <= 2
-                    and "line_items" not in missing_fields
-                    and len(simple_fields) <= 2
-                )
-                if use_small:
-                    port = PRECISION_PORTS["350m"]
-                    model_name = f"{mode_prefix}-350M-targeted"
-                    max_completion_tokens = 220
-                else:
-                    port = PRECISION_PORTS.get(precision, "8080")
-                    if precision == "350m":
-                        model_name = f"{mode_prefix}-350M"
-                    else:
-                        model_name = f"{mode_prefix}-1.2B-Q{precision}"
-                    max_completion_tokens = 650 if "line_items" in missing_fields else 320
-
-                llm_url = f"{LLAMA_CPP_BASE}:{port}/v1/chat/completions"
-                prompt = TARGETED_EXTRACTION_PROMPT_TEMPLATE.format(
-                    pre_extracted=pre_extracted_str,
-                    missing_fields=", ".join(missing_fields),
-                    ctx=llm_ctx,
-                )
-                current_schema = targeted_schema
-
-                logger.info(
-                    "LLM call: model=%s port=%s ctx_chars=%d fields=%s",
-                    model_name, port, len(llm_ctx), ",".join(missing_fields)
-                )
-
-                async with httpx.AsyncClient(timeout=600.0) as client:
-                    l_resp = await client.post(
-                        llm_url,
-                        json={
-                            "model": model_name,
-                            "messages": [
-                                {"role": "system", "content": TARGETED_SYSTEM_PROMPT},
-                                {"role": "user", "content": prompt},
-                            ],
-                            "temperature": 0.0,
-                            "max_tokens": max_completion_tokens,
-                            "response_format": {"type": "json_object", "schema": current_schema},
-                            "logprobs": True,
-                            "top_logprobs": 1,
-                        },
-                    )
-                    if l_resp.status_code != 200:
-                        logger.warning(f"Phase 2 LLM failed ({l_resp.status_code}), keeping Phase 1 results")
-                        return
-
-                    resp_json = l_resp.json()
-                    content_str = resp_json["choices"][0]["message"]["content"]
-                    try:
-                        lp_list = resp_json["choices"][0].get("logprobs", {}).get("content", [])
-                        if lp_list:
-                            avg_lp = sum(item.get("logprob", 0) for item in lp_list) / len(lp_list)
-                            semantic_score = math.exp(avg_lp)
-                    except Exception as e:
-                        logger.warning(f"Failed to calculate semantic score: {e}")
-
-                    llm_output = extract_json_from_llm(content_str)
-                    llm_raw_output = llm_output
-                    if not llm_output:
-                        logger.warning(
-                            "LLM returned empty or unparseable JSON. Raw (first 400 chars): %s",
-                            (content_str or "")[:400],
-                        )
-                        return
-
-                    for f in missing_fields:
-                        llm_val = llm_output.get(f)
-                        if llm_val is None:
-                            continue
-                        if f == "line_items" and llm_val:
-                            for li in llm_val:
-                                li["quantity"] = _parse_money(li.get("quantity")) if li.get("quantity") is not None else None
-                                li["unit_price"] = _parse_money(li.get("unit_price")) if li.get("unit_price") is not None else None
-                                li["total_price"] = _parse_money(li.get("total_price")) if li.get("total_price") is not None else None
-                            llm_val = _filter_line_items(llm_val, structured_data.get("total_amount"))
-                            if llm_val:
-                                structured_data["line_items"] = llm_val
-                        elif isinstance(llm_val, str) and len(llm_val.strip()) >= 2:
-                            structured_data[f] = llm_val.strip()
-
-                    logger.info(f"Phase 2 merged fields: {[f for f in missing_fields if structured_data.get(f)]}")
-
-            if effective_mode == "regex_llm":
-                llm_ctx = (raw_ctx[:6000] + "\n...[truncated]" if len(raw_ctx) > 6000 else raw_ctx)
-                await run_llm_phase(list(_LLM_TARGET_FIELDS), llm_ctx, "regex-llm")
-            elif effective_mode == "hybrid":
-                completeness = _compute_extraction_completeness(rule_output, hardcoded, fuzzy_score)
-                missing = completeness["missing_fields"]
-                if completeness["complete"]:
-                    model_name = "hybrid-rules-complete"
-                    logger.info(f"Hybrid mode complete in Phase 1 (confidence={completeness['confidence']:.2f})")
-                else:
-                    reduced_ctx = _build_reduced_context(raw_ctx, bool(structured_data.get("line_items")))
-                    await run_llm_phase(missing, reduced_ctx, "hybrid")
-            else:
-                model_name = "fuzzy-rules-only"
-                logger.info("Fuzzy mode selected: no LLM phase")
-
-            structuring_mode = effective_mode
-
             struct_time = time.time() - start_struct
+            logger.info(f"Fuzzy Structuring complete in {round(struct_time*1000)}ms | fuzzy={fuzzy_score:.2f}")
+
             struct_path = OUTPUT_DIR / "structure" / f"{Path(filename).stem}_{task_id[:8]}.json"
             struct_path.write_text(json.dumps(structured_data, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -1156,11 +817,11 @@ async def run_task(task_id, file_id, engine, do_structure, precision="4", struct
             # Visual Score (from the extraction result)
             visual_score = extract_data.get("avg_visual_confidence", 1.0)
             
-            # Final Weighted Score (30% Visual, 30% Semantic, 40% Logic)
-            final_confidence = (visual_score * 0.3) + (semantic_score * 0.3) + (logic_score * 0.4)
+            # Final Weighted Score (40% Visual, 60% Logic)
+            final_confidence = (visual_score * 0.4) + (logic_score * 0.6)
             final_percentage = round(final_confidence * 100, 2)
 
-            logger.info(f"Scoring -> Viz: {visual_score:.2f}, Sem: {semantic_score:.2f}, Log: {logic_score:.2f} | Final: {final_percentage}%")
+            logger.info(f"Scoring -> Viz: {visual_score:.2f}, Log: {logic_score:.2f} | Final: {final_percentage}%")
 
             # Single robust update for extractions
             db.extractions.update_one(
@@ -1188,15 +849,12 @@ async def run_task(task_id, file_id, engine, do_structure, precision="4", struct
                     "structured_json": structured_data,
                     "metadata": {
                         "model": model_name,
-                        "structuring_mode": structuring_mode,
-                        "precision": precision,
+                        "structuring_mode": "fuzzy",
                         "logic_score": logic_score,
-                        "semantic_score": semantic_score,
                         "visual_score": visual_score,
                         "confidence_score": final_percentage,
                         "structuring_time": struct_time,
                         "local_json_path": str(struct_path),
-                        "llm_raw_output": llm_raw_output,
                         "input_type": input_type,
                         "extraction_mode": extraction_mode,
                     },
@@ -1249,8 +907,6 @@ async def list_tasks(limit: int = 100):
         metadata = struct_doc.get("metadata", {}) if struct_doc else {}
         structured_json = struct_doc.get("structured_json", {}) if struct_doc else {}
         struct_mode = metadata.get("structuring_mode") or t.get("structuring_mode")
-        mode_alias = {"llm": "hybrid", "rules": "fuzzy", "rules_only": "fuzzy"}
-        struct_mode = mode_alias.get((struct_mode or "").lower(), struct_mode)
         line_items = structured_json.get("line_items", []) if isinstance(structured_json, dict) else []
         
         tasks.append({
@@ -1259,7 +915,6 @@ async def list_tasks(limit: int = 100):
             "file_id":          file_id,
             "filename":         filename,
             "engine":           t.get("engine"),
-            "precision":        t.get("precision"),
             "created_at":       t.get("created_at"),
             "updated_at":       t.get("updated_at"),
             "processing_time":  t.get("processing_time"),
@@ -1267,9 +922,8 @@ async def list_tasks(limit: int = 100):
             "error":            t.get("error"),
             "confidence_score": t.get("confidence_score") or metadata.get("confidence_score"),
             "score_viz":        metadata.get("visual_score"),
-            "score_sem":        metadata.get("semantic_score"),
             "score_log":        metadata.get("logic_score"),
-            "structuring_mode": struct_mode,
+            "structuring_mode": "fuzzy",
             "line_items_count": len(line_items) if isinstance(line_items, list) else 0,
         })
     return {"tasks": tasks}
@@ -1317,7 +971,6 @@ async def get_task_state(task_id: str):
         "error": task.get("error"),
         "confidence_score": task.get("confidence_score") or metadata.get("confidence_score"),
         "score_viz": metadata.get("visual_score"),
-        "score_sem": metadata.get("semantic_score"),
         "score_log": metadata.get("logic_score"),
     }
 
@@ -1329,7 +982,6 @@ async def get_task_data(task_id: str):
     This endpoint is used by the validation page to load:
     - human‑readable OCR markdown,
     - the structured JSON payload,
-    - raw LLM output (for debugging),
     - basic timings and the original filename.
 
     Parameters
@@ -1341,7 +993,7 @@ async def get_task_data(task_id: str):
     -------
     dict
         A rich response containing task metadata, structured JSON,
-        OCR markdown content and optional LLM raw output.
+        and OCR markdown content.
 
     Raises
     ------
@@ -1370,7 +1022,6 @@ async def get_task_data(task_id: str):
         "structuring_time": task.get("structuring_time"),
         "data":             struct.get("structured_json") if struct else None,
         "ocr_content":      ext.get("result", {}).get("content", "") if ext else "",
-        "llm_raw_output":   metadata.get("llm_raw_output"),
         "input_type":       input_type,
     }
 

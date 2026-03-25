@@ -1,0 +1,503 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "appState": {
+    "viewBackgroundColor": "#f8fafc",
+    "gridSize": 20
+  },
+  "files": {},
+  "elements": [
+
+    {
+      "type": "text",
+      "id": "title",
+      "x": 400, "y": 20,
+      "width": 700, "height": 44,
+      "text": "Fuzzy Search Pipeline — Invoice Data Extractor",
+      "originalText": "Fuzzy Search Pipeline — Invoice Data Extractor",
+      "fontSize": 32, "fontFamily": 3,
+      "textAlign": "center", "verticalAlign": "middle",
+      "strokeColor": "#1e40af", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1001, "version": 1, "versionNonce": 1001,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false
+    },
+
+    {
+      "type": "rectangle",
+      "id": "upload_box",
+      "x": 60, "y": 100, "width": 180, "height": 80,
+      "strokeColor": "#c2410c", "backgroundColor": "#fed7aa",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1002, "version": 1, "versionNonce": 1002,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "upload_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "upload_text",
+      "x": 80, "y": 125, "width": 140, "height": 25,
+      "text": "User Upload\n(PDF / Image)",
+      "originalText": "User Upload\n(PDF / Image)",
+      "fontSize": 16, "fontFamily": 3,
+      "textAlign": "center", "verticalAlign": "middle",
+      "strokeColor": "#374151", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1003, "version": 1, "versionNonce": 1003,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "upload_box"
+    },
+
+    {
+      "type": "arrow",
+      "id": "arr_upload_to_ocr",
+      "x": 250, "y": 140, "width": 60, "height": 0,
+      "strokeColor": "#6b7280", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1004, "version": 1, "versionNonce": 1004,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "points": [[0, 0], [60, 0]],
+      "startBinding": {"elementId": "upload_box", "focus": 0, "gap": 8},
+      "endBinding": {"elementId": "ocr_box", "focus": 0, "gap": 8},
+      "startArrowhead": null, "endArrowhead": "arrow"
+    },
+
+    {
+      "type": "rectangle",
+      "id": "ocr_box",
+      "x": 320, "y": 80, "width": 240, "height": 120,
+      "strokeColor": "#6d28d9", "backgroundColor": "#ddd6fe",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1005, "version": 1, "versionNonce": 1005,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "ocr_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "ocr_text",
+      "x": 335, "y": 95, "width": 210, "height": 80,
+      "text": "RapidOCR Service\n────────────────\n Layout → Tables → OCR\n→ markdown + blocks[]",
+      "originalText": "RapidOCR Service\n────────────────\n Layout → Tables → OCR\n→ markdown + blocks[]",
+      "fontSize": 15, "fontFamily": 3,
+      "textAlign": "center", "verticalAlign": "middle",
+      "strokeColor": "#374151", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1006, "version": 1, "versionNonce": 1006,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "ocr_box"
+    },
+
+    {
+      "type": "text",
+      "id": "ocr_note_digital",
+      "x": 325, "y": 215, "width": 230, "height": 40,
+      "text": "Digital PDF → PyMuPDF (no OCR)\nScanned / Image → ONNX hybrid",
+      "originalText": "Digital PDF → PyMuPDF (no OCR)\nScanned / Image → ONNX hybrid",
+      "fontSize": 13, "fontFamily": 3,
+      "textAlign": "center", "verticalAlign": "top",
+      "strokeColor": "#6d28d9", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1007, "version": 1, "versionNonce": 1007,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false
+    },
+
+    {
+      "type": "arrow",
+      "id": "arr_ocr_to_extractor",
+      "x": 570, "y": 140, "width": 60, "height": 0,
+      "strokeColor": "#6b7280", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1008, "version": 1, "versionNonce": 1008,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "points": [[0, 0], [60, 0]],
+      "startBinding": {"elementId": "ocr_box", "focus": 0, "gap": 8},
+      "endBinding": {"elementId": "extractor_box", "focus": 0, "gap": 8},
+      "startArrowhead": null, "endArrowhead": "arrow"
+    },
+    {
+      "type": "text",
+      "id": "arr_ocr_label",
+      "x": 565, "y": 112, "width": 70, "height": 18,
+      "text": "blocks[]\nmarkdown",
+      "originalText": "blocks[]\nmarkdown",
+      "fontSize": 13, "fontFamily": 3,
+      "textAlign": "center", "verticalAlign": "top",
+      "strokeColor": "#6d28d9", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1009, "version": 1, "versionNonce": 1009,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false
+    },
+
+    {
+      "type": "rectangle",
+      "id": "extractor_box",
+      "x": 640, "y": 70, "width": 280, "height": 140,
+      "strokeColor": "#b45309", "backgroundColor": "#fef3c7",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1010, "version": 1, "versionNonce": 1010,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "extractor_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "extractor_text",
+      "x": 655, "y": 85, "width": 250, "height": 110,
+      "text": "rule_extractor.py\nextract_fields_rulebased()\n──────────────────────\nVendor • Customer\nPayment • Line Items\nConfidence Score",
+      "originalText": "rule_extractor.py\nextract_fields_rulebased()\n──────────────────────\nVendor • Customer\nPayment • Line Items\nConfidence Score",
+      "fontSize": 15, "fontFamily": 3,
+      "textAlign": "center", "verticalAlign": "middle",
+      "strokeColor": "#374151", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1011, "version": 1, "versionNonce": 1011,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "extractor_box"
+    },
+
+    {
+      "type": "text",
+      "id": "section_internals_label",
+      "x": 60, "y": 295, "width": 400, "height": 28,
+      "text": "Inside extract_fields_rulebased()",
+      "originalText": "Inside extract_fields_rulebased()",
+      "fontSize": 21, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "middle",
+      "strokeColor": "#1e40af", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1012, "version": 1, "versionNonce": 1012,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false
+    },
+
+    {
+      "type": "rectangle",
+      "id": "step1_box",
+      "x": 60, "y": 340, "width": 220, "height": 130,
+      "strokeColor": "#0f766e", "backgroundColor": "#ccfbf1",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1013, "version": 1, "versionNonce": 1013,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "step1_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "step1_text",
+      "x": 70, "y": 350, "width": 200, "height": 110,
+      "text": "1. Vendor\n──────────\n_fuzzy_match(block, VENDOR_ANCHORS)\n→ blocks_below()\n→ first_non_anchor()\n→ vendor_name",
+      "originalText": "1. Vendor\n──────────\n_fuzzy_match(block, VENDOR_ANCHORS)\n→ blocks_below()\n→ first_non_anchor()\n→ vendor_name",
+      "fontSize": 13, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top",
+      "strokeColor": "#374151", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1014, "version": 1, "versionNonce": 1014,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "step1_box"
+    },
+
+    {
+      "type": "arrow",
+      "id": "arr_s1_s2",
+      "x": 290, "y": 405, "width": 30, "height": 0,
+      "strokeColor": "#6b7280", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1015, "version": 1, "versionNonce": 1015,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "points": [[0, 0], [30, 0]],
+      "startBinding": {"elementId": "step1_box", "focus": 0, "gap": 8},
+      "endBinding": {"elementId": "step2_box", "focus": 0, "gap": 8},
+      "startArrowhead": null, "endArrowhead": "arrow"
+    },
+
+    {
+      "type": "rectangle",
+      "id": "step2_box",
+      "x": 330, "y": 340, "width": 220, "height": 130,
+      "strokeColor": "#0f766e", "backgroundColor": "#ccfbf1",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1016, "version": 1, "versionNonce": 1016,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "step2_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "step2_text",
+      "x": 340, "y": 350, "width": 200, "height": 110,
+      "text": "2. Customer\n──────────\n_fuzzy_match(block, CUSTOMER_ANCHORS)\n→ blocks_below()\n→ first_non_anchor()\n→ customer_name",
+      "originalText": "2. Customer\n──────────\n_fuzzy_match(block, CUSTOMER_ANCHORS)\n→ blocks_below()\n→ first_non_anchor()\n→ customer_name",
+      "fontSize": 13, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top",
+      "strokeColor": "#374151", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1017, "version": 1, "versionNonce": 1017,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "step2_box"
+    },
+
+    {
+      "type": "arrow",
+      "id": "arr_s2_s3",
+      "x": 560, "y": 405, "width": 30, "height": 0,
+      "strokeColor": "#6b7280", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1018, "version": 1, "versionNonce": 1018,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "points": [[0, 0], [30, 0]],
+      "startBinding": {"elementId": "step2_box", "focus": 0, "gap": 8},
+      "endBinding": {"elementId": "step3_box", "focus": 0, "gap": 8},
+      "startArrowhead": null, "endArrowhead": "arrow"
+    },
+
+    {
+      "type": "rectangle",
+      "id": "step3_box",
+      "x": 600, "y": 340, "width": 220, "height": 130,
+      "strokeColor": "#0f766e", "backgroundColor": "#ccfbf1",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1019, "version": 1, "versionNonce": 1019,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "step3_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "step3_text",
+      "x": 610, "y": 350, "width": 200, "height": 110,
+      "text": "3. Payment\n──────────\n_fuzzy_match(block, PAYMENT_ANCHORS)\n→ blocks_below() or right\n→ reject price-like values\n→ payment_method",
+      "originalText": "3. Payment\n──────────\n_fuzzy_match(block, PAYMENT_ANCHORS)\n→ blocks_below() or right\n→ reject price-like values\n→ payment_method",
+      "fontSize": 13, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top",
+      "strokeColor": "#374151", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1020, "version": 1, "versionNonce": 1020,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "step3_box"
+    },
+
+    {
+      "type": "arrow",
+      "id": "arr_s3_s4",
+      "x": 830, "y": 405, "width": 30, "height": 0,
+      "strokeColor": "#6b7280", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1021, "version": 1, "versionNonce": 1021,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "points": [[0, 0], [30, 0]],
+      "startBinding": {"elementId": "step3_box", "focus": 0, "gap": 8},
+      "endBinding": {"elementId": "step4_box", "focus": 0, "gap": 8},
+      "startArrowhead": null, "endArrowhead": "arrow"
+    },
+
+    {
+      "type": "rectangle",
+      "id": "step4_box",
+      "x": 870, "y": 340, "width": 240, "height": 130,
+      "strokeColor": "#0f766e", "backgroundColor": "#ccfbf1",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1022, "version": 1, "versionNonce": 1022,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "step4_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "step4_text",
+      "x": 880, "y": 350, "width": 220, "height": 110,
+      "text": "4. Line Items\n──────────────\nParse markdown pipe-tables\n→ detect column roles\n→ skip SUMMARY_KEYWORDS\nFallback: 4-line freetext groups",
+      "originalText": "4. Line Items\n──────────────\nParse markdown pipe-tables\n→ detect column roles\n→ skip SUMMARY_KEYWORDS\nFallback: 4-line freetext groups",
+      "fontSize": 13, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top",
+      "strokeColor": "#374151", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1023, "version": 1, "versionNonce": 1023,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "step4_box"
+    },
+
+    {
+      "type": "text",
+      "id": "section_fuzzy_label",
+      "x": 60, "y": 510, "width": 450, "height": 28,
+      "text": "_fuzzy_match() — Core Mechanism",
+      "originalText": "_fuzzy_match() — Core Mechanism",
+      "fontSize": 21, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "middle",
+      "strokeColor": "#1e40af", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1024, "version": 1, "versionNonce": 1024,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false
+    },
+
+    {
+      "type": "rectangle",
+      "id": "fuzzy_engine_box",
+      "x": 60, "y": 555, "width": 400, "height": 180,
+      "strokeColor": "#1e40af", "backgroundColor": "#dbeafe",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1025, "version": 1, "versionNonce": 1025,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "fuzzy_engine_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "fuzzy_engine_text",
+      "x": 75, "y": 565, "width": 370, "height": 160,
+      "text": "Input: OCR block text + anchor pattern list + threshold (80)\n────────────────────────────────────────────────────────\nfor each pattern in anchors:\n  score = rapidfuzz.fuzz.ratio(text, pattern)\n  if score >= threshold → return (pattern, score)\n────────────────────────────────────────────────────────\nOutput: (matched_anchor, confidence_0-100) or None\n\nThresholds: Vendor=75  Customer=75  Payment=72  Line headers=70",
+      "originalText": "Input: OCR block text + anchor pattern list + threshold (80)\n────────────────────────────────────────────────────────\nfor each pattern in anchors:\n  score = rapidfuzz.fuzz.ratio(text, pattern)\n  if score >= threshold → return (pattern, score)\n────────────────────────────────────────────────────────\nOutput: (matched_anchor, confidence_0-100) or None\n\nThresholds: Vendor=75  Customer=75  Payment=72  Line headers=70",
+      "fontSize": 14, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top",
+      "strokeColor": "#1e293b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1026, "version": 1, "versionNonce": 1026,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "fuzzy_engine_box"
+    },
+
+    {
+      "type": "rectangle",
+      "id": "anchors_box",
+      "x": 490, "y": 555, "width": 250, "height": 180,
+      "strokeColor": "#1e40af", "backgroundColor": "#e0f2fe",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1027, "version": 1, "versionNonce": 1027,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "anchors_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "anchors_text",
+      "x": 500, "y": 562, "width": 230, "height": 165,
+      "text": "Anchor Lists (EN/FR/ES)\n──────────────────────\nVENDOR_ANCHORS:\n  BILL FROM, Fournisseur,\n  Seller, Emetteur…\nCUSTOMER_ANCHORS:\n  BILL TO, Client, Acheteur,\n  Ship to…\nPAYMENT_ANCHORS:\n  Payment, Paiement, Net 15…\nLINE_ITEM_HEADER_ANCHORS:\n  Description, Qty, Total…",
+      "originalText": "Anchor Lists (EN/FR/ES)\n──────────────────────\nVENDOR_ANCHORS:\n  BILL FROM, Fournisseur,\n  Seller, Emetteur…\nCUSTOMER_ANCHORS:\n  BILL TO, Client, Acheteur,\n  Ship to…\nPAYMENT_ANCHORS:\n  Payment, Paiement, Net 15…\nLINE_ITEM_HEADER_ANCHORS:\n  Description, Qty, Total…",
+      "fontSize": 13, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top",
+      "strokeColor": "#1e293b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1028, "version": 1, "versionNonce": 1028,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "anchors_box"
+    },
+
+    {
+      "type": "rectangle",
+      "id": "spatial_box",
+      "x": 770, "y": 555, "width": 220, "height": 180,
+      "strokeColor": "#1e40af", "backgroundColor": "#f0fdf4",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1029, "version": 1, "versionNonce": 1029,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "spatial_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "spatial_text",
+      "x": 782, "y": 562, "width": 198, "height": 165,
+      "text": "Spatial Logic\n─────────────\n_blocks_below(anchor_idx,\n  blocks,\n  max_rel_height)\n↓\nblocks within 25% of\npage height below anchor\n\n_first_non_anchor(blocks)\n↓\nSkip label rows → get\nactual value",
+      "originalText": "Spatial Logic\n─────────────\n_blocks_below(anchor_idx,\n  blocks,\n  max_rel_height)\n↓\nblocks within 25% of\npage height below anchor\n\n_first_non_anchor(blocks)\n↓\nSkip label rows → get\nactual value",
+      "fontSize": 13, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top",
+      "strokeColor": "#1e293b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1030, "version": 1, "versionNonce": 1030,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "spatial_box"
+    },
+
+    {
+      "type": "text",
+      "id": "section_output_label",
+      "x": 60, "y": 775, "width": 300, "height": 28,
+      "text": "Structured Output",
+      "originalText": "Structured Output",
+      "fontSize": 21, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "middle",
+      "strokeColor": "#1e40af", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1031, "version": 1, "versionNonce": 1031,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false
+    },
+
+    {
+      "type": "rectangle",
+      "id": "json_out_bg",
+      "x": 60, "y": 818, "width": 400, "height": 190,
+      "strokeColor": "#1e293b", "backgroundColor": "#1e293b",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1032, "version": 1, "versionNonce": 1032,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "json_out_text",
+      "x": 72, "y": 827, "width": 378, "height": 172,
+      "text": "{\n  \"vendor_name\": \"Acme Corp\",\n  \"vendor_address\": \"123 Main St, City\",\n  \"customer_name\": \"John Doe\",\n  \"payment_method\": \"Bank Transfer\",\n  \"line_items\": [\n    {\"description\": \"Server Rack\", \"qty\": 2, \"total\": 500}\n  ],\n  \"_fuzzy_match_score\": 0.87\n}",
+      "originalText": "{\n  \"vendor_name\": \"Acme Corp\",\n  \"vendor_address\": \"123 Main St, City\",\n  \"customer_name\": \"John Doe\",\n  \"payment_method\": \"Bank Transfer\",\n  \"line_items\": [\n    {\"description\": \"Server Rack\", \"qty\": 2, \"total\": 500}\n  ],\n  \"_fuzzy_match_score\": 0.87\n}",
+      "fontSize": 15, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top",
+      "strokeColor": "#22c55e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1033, "version": 1, "versionNonce": 1033,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false
+    },
+
+    {
+      "type": "rectangle",
+      "id": "confidence_box",
+      "x": 490, "y": 818, "width": 300, "height": 190,
+      "strokeColor": "#047857", "backgroundColor": "#d1fae5",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1034, "version": 1, "versionNonce": 1034,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "confidence_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "confidence_text",
+      "x": 500, "y": 828, "width": 280, "height": 170,
+      "text": "Confidence Scoring\n──────────────────\nEach anchor match:\n  fuzzy_scores.append(score / 100)\n\n_fuzzy_match_score =\n  avg(fuzzy_scores)\n  default 0.5 (no anchors)\n\nUsed to rank extraction quality\nand flag low-confidence results",
+      "originalText": "Confidence Scoring\n──────────────────\nEach anchor match:\n  fuzzy_scores.append(score / 100)\n\n_fuzzy_match_score =\n  avg(fuzzy_scores)\n  default 0.5 (no anchors)\n\nUsed to rank extraction quality\nand flag low-confidence results",
+      "fontSize": 14, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top",
+      "strokeColor": "#374151", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1035, "version": 1, "versionNonce": 1035,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "confidence_box"
+    },
+
+    {
+      "type": "rectangle",
+      "id": "fallback_box",
+      "x": 820, "y": 818, "width": 280, "height": 190,
+      "strokeColor": "#9333ea", "backgroundColor": "#f3e8ff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1036, "version": 1, "versionNonce": 1036,
+      "isDeleted": false, "groupIds": [], "boundElements": [{"id": "fallback_text", "type": "text"}], "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text",
+      "id": "fallback_text",
+      "x": 830, "y": 828, "width": 260, "height": 170,
+      "text": "Fallbacks\n──────────\nVendor: top-left block\n  if no anchor found\n\nCustomer: regex in markdown\n  \"Bill to:\", \"Client:\"…\n\nPayment: same-line block\n  to the right of anchor\n\nLine items: freetext\n  4-line groups",
+      "originalText": "Fallbacks\n──────────\nVendor: top-left block\n  if no anchor found\n\nCustomer: regex in markdown\n  \"Bill to:\", \"Client:\"…\n\nPayment: same-line block\n  to the right of anchor\n\nLine items: freetext\n  4-line groups",
+      "fontSize": 14, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top",
+      "strokeColor": "#374151", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0,
+      "seed": 1037, "version": 1, "versionNonce": 1037,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": "fallback_box"
+    }
+
+  ]
+}

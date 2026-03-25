@@ -42,12 +42,10 @@ User uploads a document (PDF or image) via the frontend. The backend receives it
 - **Digital PDF:** PyMuPDF extracts embedded text and tables directly — no OCR.
 - **Scanned PDF / Image:** Convert to images → layout detection (table vs text regions) → tables go to RapidTable (HTML → markdown) → remaining regions go to RapidOCR → output: **markdown** + **blocks** (text, bbox, confidence).
 
-### Step 3: Structuring (Fuzzy or LLM)
+### Step 3: Structuring (Fuzzy Only)
 - **Fuzzy mode:** Rule-based only. Uses `blocks` (with bounding boxes) and `markdown`.
-- **Hybrid mode:** Fuzzy first; LLM only if confidence is low or fields are missing.
-- **Regex+LLM mode:** Regex for headers; LLM for vendor, customer, payment, line items.
 
-### Step 4: Fuzzy Extraction (when used)
+### Step 4: Fuzzy Extraction
 1. **Vendor:** Find "BILL FROM" / "Fournisseur" anchor → blocks below → first non-anchor = vendor name; rest = address.
 2. **Customer:** Find "BILL TO" / "Client" anchor → blocks below → first non-anchor = customer name.
 3. **Payment:** Find "Payment" / "Paiement" anchor → block below or to the right = payment method.
@@ -60,7 +58,7 @@ User reviews extracted fields on the validation page (with document preview and 
 ```
 Upload → OCR (RapidOCR) → markdown + blocks
                               ↓
-                    Structuring (Fuzzy / Hybrid / Regex+LLM)
+                    Structuring (Fuzzy Only)
                               ↓
                     vendor, customer, payment, line_items
                               ↓
@@ -99,7 +97,6 @@ Upload → OCR (RapidOCR) → markdown + blocks
 **Step 5 — Confidence**
 - Each anchor match contributes a score (0–1).
 - Average score = `_fuzzy_match_score`.
-- Hybrid mode uses this to decide whether to call the LLM.
 
 **Output:** `vendor_name`, `vendor_address`, `customer_name`, `payment_method`, `line_items`, plus `_fuzzy_match_score`.
 
@@ -339,8 +336,6 @@ Total
 - `_fuzzy_match_score` = average of all anchor match scores
 - Default 0.5 when no anchors match
 
-Used by **Hybrid** mode in [`backend/main.py`](backend/main.py) to decide whether to call the LLM: if score ≥ 0.65 and target fields are present, the LLM phase is skipped.
-
 ---
 
 ## 8. Integration with the Pipeline
@@ -348,8 +343,6 @@ Used by **Hybrid** mode in [`backend/main.py`](backend/main.py) to decide whethe
 | Structuring mode | Fuzzy search usage |
 |------------------|---------------------|
 | **Fuzzy** | Rule-based only (no LLM). |
-| **Hybrid** | Rule-based first; LLM only for missing fields when confidence is low. |
-| **Regex + LLM** | Hardcoded regex for header fields; LLM for vendor, customer, payment, line items. |
 
 **Invocation:** [`extract_fields_rulebased(blocks, markdown)`](backend/rule_extractor.py) (line 214) is called from [`backend/main.py`](backend/main.py). The `blocks` come from the RapidOCR `/convert` response; `markdown` is the `content` field.
 

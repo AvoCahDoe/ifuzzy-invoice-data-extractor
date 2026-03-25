@@ -48,9 +48,6 @@ export class ValidatePage implements OnInit, OnDestroy {
   ocrTime: number | null = null;
   structuringTime: number | null = null;
 
-  // Optional preview of raw LLM output (before hybrid merge)
-  llmRawJson: string | null = null;
-
   // Input type: pdf_digital, pdf_scanned, image, other
   inputType: string | null = null;
 
@@ -151,15 +148,6 @@ export class ValidatePage implements OnInit, OnDestroy {
       if (res?.filename) this.filename = res.filename;
       if (res?.ocr_content) {
         this.markdownContent = res.ocr_content;
-      }
-      if (res?.llm_raw_output) {
-        try {
-          this.llmRawJson = JSON.stringify(res.llm_raw_output, null, 2);
-        } catch {
-          this.llmRawJson = null;
-        }
-      } else {
-        this.llmRawJson = null;
       }
     } catch { /* ignore */ }
 

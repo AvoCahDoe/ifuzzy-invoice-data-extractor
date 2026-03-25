@@ -19,13 +19,9 @@ type TaskRow = {
   struct_time: number | null;
   total_time: number | null;
   engine?: string;
-  precision?: string;
-  precisionName?: string;
   confidence_score?: number;
   score_viz?: number;
-  score_sem?: number;
   score_log?: number;
-  structuring_mode?: string;
   line_items_count?: number;
 };
 
@@ -82,13 +78,9 @@ export class StatusPage implements OnInit, OnDestroy {
           struct_time: struct,
           total_time: total,
           engine: t.engine,
-          precision: t.precision,
-          precisionName: t.precision === '16' || t.precision === 'f16' ? 'F16' : (t.precision === '350m' ? '350M' : (t.precision ? t.precision + '-bit' : '')),
           confidence_score: t.confidence_score,
           score_viz: t.score_viz,
-          score_sem: t.score_sem,
           score_log: t.score_log,
-          structuring_mode: t.structuring_mode || '-',
           line_items_count: typeof t.line_items_count === 'number' ? t.line_items_count : 0,
         };
       });
@@ -211,12 +203,5 @@ export class StatusPage implements OnInit, OnDestroy {
     return Math.round(v).toString();
   }
 
-  modeLabel(mode: string | undefined): string {
-    const m = (mode || '').toLowerCase();
-    if (m === 'regex_llm') return 'Regex + LLM';
-    if (m === 'fuzzy') return 'Fuzzy Search';
-    if (m === 'hybrid') return 'Hybrid';
-    return '-';
-  }
-    
+
 }

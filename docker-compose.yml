@@ -10,11 +10,9 @@ services:
       - PORT=8001
       - HOST=0.0.0.0
       - RAPIDOCR_SERVICE_URL=http://rapidocr_service:8005
-      - LLAMA_CPP_HOST=http://llamacpp:8080/v1
       - MONGODB_URI=mongodb://mongodb:27017
     depends_on:
       - rapidocr_service
-      - llamacpp
       - mongodb
     volumes:
       - ./processed_output:/app/processed_output
@@ -35,7 +33,7 @@ services:
     networks:
       - invoice-net
 
-  # Marker and MinerU services have been removed; RapidOCR is the only extraction engine.
+  # RapidOCR is the only extraction engine.
 
   rapidocr_service:
     build:
@@ -47,21 +45,6 @@ services:
       - "8005:8005"
     volumes:
       - rapidocr_cache:/root/.cache
-    networks:
-      - invoice-net
-
-  llamacpp:
-    image: ghcr.io/ggml-org/llama.cpp:server
-    ports:
-      - "8003:8080"
-      - "8031:8081"
-      - "8032:8082"
-      - "8033:8083"
-      - "8034:8084"
-    volumes:
-      - ./models:/models
-    # Uses start_llama.sh to run llama-server with CPU optimization
-    entrypoint: ["/bin/sh", "/models/start_llama.sh"]
     networks:
       - invoice-net
 
