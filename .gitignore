@@ -1,3 +1,5 @@
+# Cursor / local tooling (not part of app)
+.claude/
 
 __pycache__/
 *.pyc
