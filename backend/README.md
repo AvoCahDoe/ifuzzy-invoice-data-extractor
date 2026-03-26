@@ -36,7 +36,7 @@ Swagger docs are available at `http://localhost:8001/docs`.
 - **Maintenance**
   - `POST /system/cleanup` – wipe all files, tasks and results (development only).
 
-For a full field‑level description of the pipeline and collections, see `TECHNICAL.md`.
+For fuzzy extraction, OCR integration, and pipeline flow, see [`../FUZZY_SEARCH.md`](../FUZZY_SEARCH.md) and the root [`README.md`](../README.md).
 
 ### Environment
 

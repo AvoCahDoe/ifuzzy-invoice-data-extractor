@@ -37,7 +37,7 @@ Data artifacts (on the backend container) are written under:
 - `processed_output/structure/` – final structured JSON
 - `processed_output/images/` – original uploads and OCR snapshots
 
-For deeper technical details, see `TECHNICAL.md`.
+For fuzzy matching, OCR outputs, and pipeline flow, see [`FUZZY_SEARCH.md`](FUZZY_SEARCH.md).
 
 ---
 
@@ -74,12 +74,10 @@ For deeper technical details, see `TECHNICAL.md`.
      - optional raw LLM JSON.
    - User corrections are saved via `PUT /update/{file_id}`, which also marks the task as validated.
 
-More implementation details and LLM/structuring internals are documented in:
+Further documentation:
 
-- `TECHNICAL.md`
-- `STRUCTURING_STRATEGY.md`
-- `STRUCTURING_REPORT.md`
-- `STRUCTURING_IMPROVEMENTS.md`
+- [`FUZZY_SEARCH.md`](FUZZY_SEARCH.md) — fuzzy rules, RapidOCR outputs, extraction flow
+- Service READMEs under `backend/`, `frontend/`, `rapidocr_service/`
 
 ---
 
