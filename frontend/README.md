@@ -22,12 +22,17 @@ Angular SSR application that provides the UI for uploading invoices, tracking ta
 - **Validate** (`/validate/:taskId/:fileId`)
   - Loads task data from `/task/data/{taskId}`.
   - Shows:
-    - PDF/image preview (via `/files/raw/{file_id}`),
+    - PDF/image preview (via `/files/raw/{file_id}`); opening the image modal uses the **`bbox-overlay-viewer`** component when overlays are available: OCR lines (confidence‑colored), **table** regions, and **anchor** boxes from **`metadata.anchor_indicators`**.
+    - Optional **Fuzzy anchors** row (✓/—) when **`metadata`** includes anchor indicators.
     - OCR markdown,
     - structured fields and line items in editable form,
     - optional raw LLM JSON for inspection.
   - Runs client‑side validation (dates, totals, line items).
   - Sends corrections to `PUT /update/{file_id}`.
+
+### Components
+
+- **`bbox-overlay-viewer`** (`src/app/components/bbox-overlay-viewer/`) – isolated overlay for the image modal: zoom, toggle boxes, tooltips; inputs include `imageUrl`, `blocks`, `tableRegions`, `anchorIndicators`.
 
 ### Tech stack
 

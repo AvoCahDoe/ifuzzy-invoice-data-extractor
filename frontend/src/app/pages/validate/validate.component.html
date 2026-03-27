@@ -10,7 +10,11 @@
       <aside class="preview-drawer">
         <div class="preview-header">
           <h3>Document Preview</h3>
-          <span class="click-hint" *ngIf="!previewLoading && previewImgUrl">Zoom: −/+ or Ctrl+scroll · Click image to expand</span>
+          <span class="click-hint" *ngIf="!previewLoading && previewImgUrl && !isPdf">Zoom: −/+ or Ctrl+scroll · Click image to expand</span>
+          <div *ngIf="!previewLoading && !isPdf && previewImgUrl" class="preview-header-actions">
+            <span *ngIf="blocks?.length" class="click-hint">OCR boxes available</span>
+            <button type="button" class="btn btn-small outline" (click)="openImageModal(); $event.stopPropagation()">Expand</button>
+          </div>
           <div *ngIf="!previewLoading && isPdf && previewPdfUrl" class="preview-header-actions">
             <span class="click-hint">Scroll to read</span>
             <button type="button" class="btn btn-small outline" (click)="openImageModal()">Expand</button>
@@ -73,6 +77,13 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
                 Structuring: <strong>{{ structuringTime | number:'1.2-2' }}s</strong>
               </span>
+            </div>
+            <div class="stats-bar stats-bar--anchors" *ngIf="fuzzyAnchorIndicators as ai">
+              <span class="stat-item stat-item--title">Fuzzy anchors</span>
+              <span class="stat-item">Vendor {{ ai.vendor?.detected ? '✓' : '—' }}</span>
+              <span class="stat-item">Customer {{ ai.customer?.detected ? '✓' : '—' }}</span>
+              <span class="stat-item">Payment {{ ai.payment?.detected ? '✓' : '—' }}</span>
+              <span class="stat-item">Line header {{ ai.line_item_header?.detected ? '✓' : '—' }}</span>
             </div>
 
             <!-- Validation errors summary -->
@@ -210,8 +221,19 @@
   <!-- Image zoom modal (click preview to open) -->
   <div class="image-modal-backdrop" *ngIf="imageModalOpen" (click)="closeImageModal()">
     <div class="image-modal" (click)="$event.stopPropagation()">
+      <bbox-overlay-viewer
+        *ngIf="!isPdf && previewImgUrl && useBboxModal"
+        [imageUrl]="previewImgUrl"
+        alt="Invoice"
+        mode="modal"
+        [showClose]="true"
+        [blocks]="blocks"
+        [tableRegions]="tableRegions"
+        [anchorIndicators]="fuzzyAnchorIndicators"
+        (close)="closeImageModal()"
+      />
       <zoomable-image-viewer
-        *ngIf="!isPdf && previewImgUrl"
+        *ngIf="!isPdf && previewImgUrl && !useBboxModal"
         [imageUrl]="previewImgUrl"
         alt="Invoice"
         mode="modal"

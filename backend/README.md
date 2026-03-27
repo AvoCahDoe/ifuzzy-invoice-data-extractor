@@ -27,7 +27,7 @@ Swagger docs are available at `http://localhost:8001/docs`.
   - `POST /task/send` – create one or more extraction tasks for a file.
   - `GET /task/list` – list recent tasks with scores and timings.
   - `GET /task/state/{task_id}` – get status and scoring components.
-  - `GET /task/data/{task_id}` – full task payload (structured JSON + OCR markdown + metadata).
+  - `GET /task/data/{task_id}` – full task payload: structured JSON, OCR markdown, **`blocks`** (per-line OCR boxes + confidence), optional **`table_regions`** (`kind`, `page_num`, `bbox`), and **`metadata`** from structured data (e.g. **`anchor_indicators`**: vendor / customer / payment / line-item header with `detected` + `bbox`).
 
 - **Results**
   - `GET /extraction/{file_id}` – latest OCR result for a file.

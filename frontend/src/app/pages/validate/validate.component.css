@@ -667,4 +667,18 @@
   color: #007bff;
 }
 
+.stats-bar--anchors {
+  margin-top: -0.75rem;
+  margin-bottom: 1.5rem;
+  background-color: #f3f0ff;
+  border-color: #d4c4f9;
+  color: #3b2c5c;
+  flex-wrap: wrap;
+}
+
+.stat-item--title {
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
+
 

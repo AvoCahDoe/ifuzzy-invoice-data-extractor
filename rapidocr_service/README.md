@@ -10,6 +10,7 @@ FastAPI microservice that turns invoices (PDFs or images) into markdown + layout
 - Returns:
   - `content` – combined markdown (tables + text),
   - `blocks` – per‑block text, bounding boxes, confidence, page index,
+  - **`table_regions`** – list of `{ "kind": "table", "page_num", "bbox" }` from layout table detection (raster OCR) or PyMuPDF table finder (digital PDF text),
   - metadata such as `avg_visual_confidence`, `extraction_mode`, and timing.
 
 The backend uses this output as the single source of truth for both rule‑based and LLM structuring.
@@ -23,7 +24,7 @@ The backend uses this output as the single source of truth for both rule‑based
     - `file` – uploaded document (`.pdf`, `.jpg`, `.png`, `.webp`, `.tiff`, etc.).
     - `force_ocr` (optional) – when `true`, forces OCR even for digital PDFs.
   - **Response**
-    - JSON with `content`, `blocks`, `avg_visual_confidence`, `processing_time`, `extraction_mode`, and optionally inline images.
+    - JSON with `content`, `blocks`, **`table_regions`** (may be `[]`), `avg_visual_confidence`, `processing_time`, `extraction_mode`, and optionally inline images.
 
 ### Local development
 

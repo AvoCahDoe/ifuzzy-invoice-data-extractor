@@ -94,12 +94,17 @@ def pdf_has_text(pdf_path: str) -> bool:
         print(f"pdf_has_text error: {e}")
     return False
 
-def extract_text_from_pdf(pdf_path: str) -> tuple[str, list[dict]]:
-    """Extract embedded text and tables directly using PyMuPDF (No OCR). Returns (markdown, blocks)."""
+def extract_text_from_pdf(pdf_path: str) -> tuple[str, list[dict], list[dict]]:
+    """Extract embedded text and tables directly using PyMuPDF (No OCR).
+
+    Returns (markdown, blocks, table_regions). Table bboxes use PyMuPDF page coordinates
+    (may not match rasterized preview if the UI shows the native PDF viewer).
+    """
     import fitz
     doc = fitz.open(pdf_path)
     all_sections = []
     all_blocks: list[dict] = []
+    all_table_regions: list[dict] = []
 
     for page_num, page in enumerate(doc):
         if len(doc) > 1:
@@ -113,6 +118,12 @@ def extract_text_from_pdf(pdf_path: str) -> tuple[str, list[dict]]:
         if tabs and tabs.tables:
             for table in tabs.tables:
                 table_bboxes.append(table.bbox)
+                tx0, ty0, tx1, ty1 = table.bbox
+                all_table_regions.append({
+                    "kind": "table",
+                    "page_num": page_num,
+                    "bbox": [float(tx0), float(ty0), float(tx1), float(ty1)],
+                })
                 try:
                     import pandas as pd
                     import tabulate
@@ -158,7 +169,7 @@ def extract_text_from_pdf(pdf_path: str) -> tuple[str, list[dict]]:
         all_sections.extend(page_sections)
 
     doc.close()
-    return "\n\n".join(all_sections), all_blocks
+    return "\n\n".join(all_sections), all_blocks, all_table_regions
 
 
 # ---------------------------------------------------------------------------
@@ -231,17 +242,21 @@ class OcrWrapper:
 # Inject wrapper into the table engine so it can read text inside tables correctly
 table_engine.ocr_engine = OcrWrapper(ocr_engine)
 
-def run_onnx_ocr(images: list) -> tuple[str, list[float], list[dict]]:
+def run_onnx_ocr(images: list) -> tuple[str, list[float], list[dict], list[dict]]:
     """
     Hybrid ONNX pipeline per page using masking to prevent text duplication.
     1. Finds tables with Layout engine.
     2. Extracts structured tables into Markdown.
     3. Masks (whites out) table areas so general OCR ignores them.
     4. Runs general OCR on remaining text.
+
+    Returns (markdown, confidences, blocks, table_regions). Table bboxes match the raster
+    image used for OCR (same coordinate space as text blocks).
     """
     all_sections: list[str] = []
     all_confidences: list[float] = []
     all_blocks: list[dict] = []
+    all_table_regions: list[dict] = []
 
     for page_num, pil_img in enumerate(images):
         if len(images) > 1:
@@ -278,6 +293,12 @@ def run_onnx_ocr(images: list) -> tuple[str, list[float], list[dict]]:
                     x1, y1, x2, y2 = (int(v) for v in bbox[:4])
                     x1, y1 = max(0, x1), max(0, y1)
                     x2, y2 = min(img_array.shape[1], x2), min(img_array.shape[0], y2)
+
+                    all_table_regions.append({
+                        "kind": "table",
+                        "page_num": page_num,
+                        "bbox": [float(x1), float(y1), float(x2), float(y2)],
+                    })
                     
                     if idx < len(layout_scores):
                         all_confidences.append(float(layout_scores[idx]))
@@ -315,7 +336,7 @@ def run_onnx_ocr(images: list) -> tuple[str, list[float], list[dict]]:
 
         all_sections.extend(page_sections)
 
-    return "\n\n".join(s for s in all_sections if s.strip()), all_confidences, all_blocks
+    return "\n\n".join(s for s in all_sections if s.strip()), all_confidences, all_blocks, all_table_regions
 
 
 def _extract_ocr_lines(ocr_result, min_score: float = 0.4) -> tuple[list[str], list[float], list[dict]]:
@@ -448,23 +469,24 @@ def convert(
         extraction_mode = "onnx_hybrid"
         all_confidences = []
         all_blocks = []
+        table_regions: list[dict] = []
 
         if suffix in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"):
             try:
                 images = [Image.open(temp_file_path).convert("RGB")]
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Failed to open image: {e}")
-            markdown_text, all_confidences, all_blocks = run_onnx_ocr(images)
+            markdown_text, all_confidences, all_blocks, table_regions = run_onnx_ocr(images)
             extraction_mode = "onnx_hybrid_image"
         elif suffix == ".pdf":
             try:
                 if pdf_has_text(temp_file_path):
-                    markdown_text, all_blocks = extract_text_from_pdf(temp_file_path)
+                    markdown_text, all_blocks, table_regions = extract_text_from_pdf(temp_file_path)
                     extraction_mode = "fitz_digital_pdf"
                     all_confidences = [1.0]
                 else:
                     images = pdf_to_images(temp_file_path)
-                    markdown_text, all_confidences, all_blocks = run_onnx_ocr(images)
+                    markdown_text, all_confidences, all_blocks, table_regions = run_onnx_ocr(images)
                     extraction_mode = "onnx_hybrid_pdf"
             except Exception as e:
                 import traceback
@@ -486,6 +508,7 @@ def convert(
             "original_path": original_filename,
             "content": markdown_text,
             "blocks": all_blocks,
+            "table_regions": table_regions,
             "avg_visual_confidence": avg_viz_conf,
             "images": [],
             "images_count": 0,

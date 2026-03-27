@@ -47,21 +47,85 @@ LINE_ITEM_HEADER_ANCHORS = [
     "Service", "Libellé", "Product", "Hrs", "Hours", "Rate", "Networth",
     "Gross worth", "SERVICE DESCRIPTION", "HOURS", "RATE", "AMOUNT"
 ]
-SUMMARY_KEYWORDS = [
-    "subtotal", "sub total", "s.total", "total", "tax", "tva", "net", "amount due", "balance",
-    "remise", "discount", "shipping", "frais", "gross", "grand total",
-    "total due", "net à payer", "total ttc", "total ht", "montant ttc",
-    "balance due", "vat", "taxable", "total amount", "net payable",
-    "hst", "gst", "pst", "iva", "sales tax", "invoice total",
-    "bill amount", "net total", "amount before tax", "pre-tax",
-    "shipping and handling", "shipping & handling", "handling"
-]
+# Phrases for *document* totals rows — not substring checks on bare "tax"/"total"/"net"
+# (those match "Tax rate", "Total" column headers, "Internet", etc.).
+_FOOTER_BOUNDARY_PHRASES = (
+    "subtotal",
+    "sub total",
+    "s.total",
+    "grand total",
+    "invoice total",
+    "quote total",
+    "order total",
+    "total due",
+    "amount due",
+    "balance due",
+    "total amount",
+    "net total",
+    "bill amount",
+    "net à payer",
+    "total ttc",
+    "total ht",
+    "montant ttc",
+    "sales tax",
+    "remise",
+    "discount",
+    "shipping",
+    "frais",
+    "gross",
+    "pre-tax",
+    "amount before tax",
+    "hst",
+    "gst",
+    "pst",
+    "iva",
+    "shipping and handling",
+    "shipping & handling",
+    "handling",
+    "net payable",
+    "total payable",
+    "balance due",
+    "taxable",
+)
+
+
+def _is_summary_footer_text(text: str) -> bool:
+    """
+    True if this OCR block (or joined table row) is a totals/summary line, not a column header.
+    Used to find footer_y for DBSCAN and to skip summary rows in line items.
+    """
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    # Table column headers / chrome — not end-of-document totals
+    if re.search(r"\btax\s+rate\b", t):
+        return False
+    if re.search(r"\b(hourly|unit|exchange)\s+rate\b", t):
+        return False
+    if t in ("total", "amount", "tax", "tva", "qty", "quantity", "description", "product", "item"):
+        return False
+    for phrase in _FOOTER_BOUNDARY_PHRASES:
+        if phrase in t:
+            return True
+    # Summary lines: label then colon (not "Tax rate")
+    if re.match(r"^\s*(tax|tva|vat)\s*[:\-]", t):
+        return True
+    if re.match(r"^\s*(tax|tva|vat)\s+[\$€£]?\s*[\d]", t):
+        return True
+    if re.match(r"^\s*(subtotal|quote\s+total|grand\s+total|invoice\s+total)\s*[:\-]", t):
+        return True
+    if re.match(r"^\s*total\s*[:\-]", t) and len(t) < 120:
+        return True
+    # "Total $1,650" without colon (not the single-word column header)
+    if re.match(r"^\s*total\s+[\$€£]?\s*[\d]", t) and len(t) < 120:
+        return True
+    return False
 
 # Column header patterns for smart column detection (pipe tables)
 # Used to map table columns to desc/qty/price/total/pos roles
 _DESC_HEADERS  = ["description", "name", "nom", "designation", "désignation", "item", "article", "libelle", "libellé", "product", "produit", "service", "service description", "product name", "details", "détails", "col0"]
-_QTY_HEADERS   = ["qty", "qté", "qte", "quantity", "quantite", "quantité", "qty/hrs", "hours", "hrs", "nb", "nbr", "nombre", "pieces", "pcs", "units", "unités", "unit"]
-_PRICE_HEADERS = ["unit price", "unit_price", "unit price (mad)", "prix", "price", "pu", "prix unitaire", "netprice", "unit", "rate", "tarif", "price per unit", "net price", "prix unitaire"]
+_QTY_HEADERS   = ["qty", "qté", "qte", "quantity", "quantite", "quantité", "qty/hrs", "hours", "hrs", "nb", "nbr", "nombre", "pieces", "pcs", "units", "unités"]
+_PRICE_HEADERS = ["unit price", "unit_price", "unit price (mad)", "prix", "price", "pu", "prix unitaire", "netprice", "rate", "tarif", "price per unit", "net price"]
 _TOTAL_HEADERS = ["total", "total ht", "montant", "amount", "networth", "gross worth", "line total", "line total (mad)", "total(ht)", "total (ht)", "net amount", "montant net", "montant total", "line amount", "grossworth", "sub total", "subtotal", "ext. price", "ext price", "extended price", "extended", "amount (ht)", "total (ih)"]
 _POS_HEADERS   = ["pos", "no.", "no", "#", "num", "n°", "numero", "numéro", "item no", "ref", "index", "row"]
 
@@ -89,10 +153,21 @@ def _col_role(header_text: str) -> Optional[str]:
     h = (header_text or "").strip().lower()
     if not h:
         return None
-    # Exact / substring checks first (faster, handles no-space OCR)
-    for pat in _POS_HEADERS:
+
+    # Check DESC first to prevent short words like 'nom' matching pos header 'no'
+    for pat in _DESC_HEADERS:
+        if h == pat or pat in h:
+            return "desc"
+
+    # Short/ambiguous pos headers: exact match only to avoid false positives
+    _POS_EXACT = {"pos", "no.", "#", "n°", "item no"}
+    _POS_SUBSTRING = {"num", "numero", "numéro", "index", "row", "ref"}
+    if h in _POS_EXACT:
+        return "pos"
+    for pat in _POS_SUBSTRING:
         if h == pat or h.startswith(pat):
             return "pos"
+
     for pat in _QTY_HEADERS:
         if h == pat or pat in h:
             return "qty"
@@ -102,9 +177,7 @@ def _col_role(header_text: str) -> Optional[str]:
     for pat in _PRICE_HEADERS:
         if h == pat or pat in h:
             return "price"
-    for pat in _DESC_HEADERS:
-        if h == pat or pat in h:
-            return "desc"
+
     # Fuzzy fallback
     if HAS_RAPIDFUZZ:
         if fuzz.ratio(h, "description") >= 70 or fuzz.ratio(h, "designation") >= 70:
@@ -125,9 +198,12 @@ def _detect_column_map(header_cells: list) -> dict:
     Falls back to positional guessing when headers don't resolve.
     """
     role_map = {}
+    pos_col_idx = None
     for i, cell in enumerate(header_cells):
         role = _col_role(cell)
-        if role and role != "pos" and role not in role_map:
+        if role == "pos":
+            pos_col_idx = i
+        elif role and role not in role_map:
             role_map[role] = i
     n = len(header_cells)
     # Positional fallbacks for common patterns
@@ -140,7 +216,11 @@ def _detect_column_map(header_cells: list) -> dict:
         elif n == 2:
             return {"desc": 0, "total": 1}
     if "desc" not in role_map and n >= 1:
-        role_map["desc"] = 0
+        # If a pos column exists at index 0, prefer the next column as desc
+        if pos_col_idx == 0 and n >= 2:
+            role_map["desc"] = 1
+        else:
+            role_map["desc"] = 0
     if "total" not in role_map and n >= 2:
         role_map["total"] = n - 1
     return role_map
@@ -149,6 +229,25 @@ def _detect_column_map(header_cells: list) -> dict:
 def _block_bbox(blk: dict) -> tuple:
     b = blk.get("bbox", [0, 0, 0, 0])
     return (float(b[0]), float(b[1]), float(b[2]), float(b[3]))
+
+
+def _bbox_list_from_idx(blocks: list, idx: int | None) -> list | None:
+    """Serialize block bbox for API / UI, or None."""
+    if idx is None or idx < 0 or idx >= len(blocks):
+        return None
+    b = blocks[idx].get("bbox")
+    if not b or len(b) < 4:
+        return None
+    return [float(b[0]), float(b[1]), float(b[2]), float(b[3])]
+
+
+def _bbox_list_from_block(blk: dict | None) -> list | None:
+    if not blk:
+        return None
+    b = blk.get("bbox")
+    if not b or len(b) < 4:
+        return None
+    return [float(b[0]), float(b[1]), float(b[2]), float(b[3])]
 
 
 def _block_cy(blk: dict) -> float:
@@ -288,6 +387,13 @@ def extract_fields_rulebased(blocks: list, markdown: str) -> dict:
     }
     fuzzy_scores = []
 
+    empty_anchors = {
+        "vendor": {"detected": False, "bbox": None},
+        "customer": {"detected": False, "bbox": None},
+        "payment": {"detected": False, "bbox": None},
+        "line_item_header": {"detected": False, "bbox": None},
+    }
+
     blocks = blocks or []
     if not blocks:
         out["line_items"] = _parse_line_items_from_markdown(markdown or "")
@@ -296,6 +402,7 @@ def extract_fields_rulebased(blocks: list, markdown: str) -> dict:
             out["payment_method"] = _extract_payment_from_markdown(markdown or "")
         if not out["customer_name"]:
             out["customer_name"] = _extract_customer_from_markdown(markdown or "")
+        out["anchor_indicators"] = empty_anchors
         return out
 
     # Find vendor anchor
@@ -339,9 +446,11 @@ def extract_fields_rulebased(blocks: list, markdown: str) -> dict:
             out["customer_name"] = (first.get("text") or "").strip()
 
     # Find payment anchor (spatial first, then markdown fallback)
+    payment_anchor_idx = None
     for idx, blk in enumerate(blocks):
         m = _fuzzy_match(blk.get("text", ""), PAYMENT_ANCHORS, 72)
         if m:
+            payment_anchor_idx = idx
             fuzzy_scores.append(m[1] / 100.0)
             below = _blocks_below(idx, blocks, max_rel_height=0.08)
             first = _first_non_anchor(below, VENDOR_ANCHORS + CUSTOMER_ANCHORS + LINE_ITEM_HEADER_ANCHORS)
@@ -381,20 +490,23 @@ def extract_fields_rulebased(blocks: list, markdown: str) -> dict:
 
     # Line items: try DBSCAN first, fallback to markdown pipe tables
     dbscan_items = []
+    line_header_blk = None
     if blocks:
         # Find header Y bounds
         header_y = None
         for blk in blocks:
             if _fuzzy_match(blk.get("text", ""), LINE_ITEM_HEADER_ANCHORS, 80):
+                line_header_blk = blk
                 header_y = _block_cy(blk) - 15  # a bit above the center
                 break
 
-        # Find footer Y bounds
+        # Find footer Y bounds (first summary line below the table, in reading order)
         footer_y = 99999.0
         if header_y:
             below_header = [b for b in blocks if _block_cy(b) > header_y + 30]
+            below_header.sort(key=lambda b: (_block_cy(b), _block_cx(b)))
             for blk in below_header:
-                if any(kw in (blk.get("text", "").lower()) for kw in SUMMARY_KEYWORDS):
+                if _is_summary_footer_text(blk.get("text", "")):
                     footer_y = _block_cy(blk) - 5
                     break
 
@@ -409,8 +521,8 @@ def extract_fields_rulebased(blocks: list, markdown: str) -> dict:
                 texts = [(b.get("text") or "").strip() for b in row]
                 row_str = " | ".join(texts)
                 
-                # Check if this row looks like a summary/subtotal row
-                if any(kw in row_str.lower() for kw in SUMMARY_KEYWORDS):
+                # Skip document totals rows (not "Tax rate" / column headers)
+                if _is_summary_footer_text(row_str):
                     continue
                     
                 desc = texts[0]
@@ -437,6 +549,25 @@ def extract_fields_rulebased(blocks: list, markdown: str) -> dict:
 
     # Fuzzy match score
     out["_fuzzy_match_score"] = sum(fuzzy_scores) / len(fuzzy_scores) if fuzzy_scores else 0.5
+
+    out["anchor_indicators"] = {
+        "vendor": {
+            "detected": vendor_anchor_idx is not None,
+            "bbox": _bbox_list_from_idx(blocks, vendor_anchor_idx),
+        },
+        "customer": {
+            "detected": customer_anchor_idx is not None,
+            "bbox": _bbox_list_from_idx(blocks, customer_anchor_idx),
+        },
+        "payment": {
+            "detected": payment_anchor_idx is not None,
+            "bbox": _bbox_list_from_idx(blocks, payment_anchor_idx),
+        },
+        "line_item_header": {
+            "detected": line_header_blk is not None,
+            "bbox": _bbox_list_from_block(line_header_blk),
+        },
+    }
 
     return out
 
@@ -509,8 +640,7 @@ def _is_likely_desc_line(text: str) -> bool:
         return False
     if _parse_num_clean(t) is not None:
         return False
-    low = t.lower()
-    if any(k in low for k in SUMMARY_KEYWORDS):
+    if _is_summary_footer_text(t):
         return False
     return any(c.isalpha() for c in t)
 
@@ -576,7 +706,7 @@ def _parse_line_items_from_freetext(md: str) -> list:
         price_line = lines[i + 2]
         total_line = lines[i + 3]
 
-        if any(k in desc.lower() for k in SUMMARY_KEYWORDS):
+        if _is_summary_footer_text(desc):
             break
 
         if (
@@ -625,12 +755,12 @@ def _process_data_row(cells: list, col_map: dict, items: list) -> None:
 
     # Skip rows that look like summaries
     desc_lower = (desc or "").lower().strip()
-    if any(k in desc_lower for k in SUMMARY_KEYWORDS):
+    if _is_summary_footer_text(desc or ""):
         return
 
     # Rows that carry continuation text for previous item
     if items and desc and qty is None and price is None and total is None:
-        if not any(k in desc_lower for k in SUMMARY_KEYWORDS):
+        if not _is_summary_footer_text(desc or ""):
             items[-1]["description"] = f'{items[-1].get("description", "").strip()} {desc.strip()}'.strip()
         return
 

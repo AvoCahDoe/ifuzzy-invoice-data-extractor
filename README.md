@@ -6,8 +6,9 @@ Structured invoice extraction pipeline built on **FastAPI**, **RapidOCR**, **Mon
 
 - **End‑to‑end pipeline**: upload → OCR/layout → structuring → validation UI.
 - **Local‑only**: ONNX OCR models (no external APIs).
-- **Rule-based structuring**: regex + rule‑based fuzzy extraction.
+- **Rule-based structuring**: regex + rule‑based fuzzy extraction (spatial anchors, DBSCAN line items, markdown tables).
 - **Confidence scoring**: combines visual OCR quality and math checks.
+- **Validation preview**: colored bounding boxes for OCR lines (by confidence), detected **table regions**, and **fuzzy anchor** hits (vendor, customer, payment, line-item header); compact **anchor** indicators when metadata is present.
 - **Modern UI**: Angular SSR app with side‑by‑side preview and interactive corrections.
 
 ---
@@ -53,12 +54,12 @@ For fuzzy matching, OCR outputs, and pipeline flow, see [`FUZZY_SEARCH.md`](FUZZ
      - Detects layout and tables.
      - Reconstructs tables as markdown pipe tables.
      - Runs OCR on the remaining regions.
-   - It returns markdown `content`, `blocks` with bounding boxes, and visual confidence.
+   - It returns markdown `content`, `blocks` with bounding boxes, optional **`table_regions`** (layout/PyMuPDF table boxes), and visual confidence.
 
 3. **Structuring (Backend + rules)**
    - **Hardcoded regex + rule‑based extractor**
-     - `extract_fields_hardcoded` finds totals, dates, currency, etc.
-     - `extract_fields_rulebased` (from `rule_extractor.py`) uses spatial anchors and table parsing to extract vendor, customer, payment method, and line items.
+     - `extract_fields_hardcoded` finds totals, dates, currency, etc. (including labels such as **Quote total** where the text matches).
+     - `extract_fields_rulebased` (from `rule_extractor.py`) uses spatial anchors and table parsing to extract vendor, customer, payment method, and line items. It emits **`anchor_indicators`** (per-anchor `detected` + `bbox`), stored under **`structured_data.metadata`** and not merged into invoice fields.
 
 4. **Scoring & persistence**
    - A final confidence score is computed:  
@@ -68,11 +69,14 @@ For fuzzy matching, OCR outputs, and pipeline flow, see [`FUZZY_SEARCH.md`](FUZZ
 5. **Validation UI**
    - The status page (`/status`) lists tasks and scores.
    - The validate page (`/validate/:taskId/:fileId`) shows:
-     - PDF/image preview,
+     - PDF/image preview; expanded image modal uses the isolated **`bbox-overlay-viewer`** when overlays apply (`blocks`, **`table_regions`**, and/or anchor boxes).
      - OCR markdown,
      - structured JSON form and line items,
      - optional raw LLM JSON.
+     - **`GET /task/data`** exposes `blocks`, **`table_regions`**, and **`metadata`** (including **`anchor_indicators`** for tasks structured after that feature shipped).
    - User corrections are saved via `PUT /update/{file_id}`, which also marks the task as validated.
+
+   **Overlay coordinates:** Boxes in the image modal match the **OCR raster** (uploaded images and rasterized PDF pages). **`table_regions`** for text-native PDFs use **PyMuPDF** page space; they are persisted for consistency but are not guaranteed to align with a native PDF viewer until that path is integrated.
 
 Further documentation:
 

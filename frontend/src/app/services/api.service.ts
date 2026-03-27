@@ -9,18 +9,13 @@ export class ApiService {
 
   constructor(private http: HttpClient) {
     const isBrowser = typeof window !== 'undefined';
-
-    const browserBase = isBrowser
-      ? (() => {
-          const { protocol, hostname } = window.location;
-          // Always talk to backend on port 8001 from the browser (Docker mapping)
-          return `${protocol}//${hostname}:8001`;
-        })()
-      : null;
-
-    const ssrBase = (globalThis as any)?.process?.env?.API_BASE_URL || 'http://backend:8001';
-
-    this.base = isBrowser ? (browserBase || 'http://localhost:8001') : ssrBase;
+    if (isBrowser) {
+      // Same-origin `/api` is proxied by Express (production) or `ng serve` (proxy.conf.json).
+      this.base = '/api';
+    } else {
+      this.base =
+        (globalThis as any)?.process?.env?.API_BASE_URL ?? 'http://backend:8001';
+    }
   }
 
   upload(file: File): Observable<{ file_id: string }> {

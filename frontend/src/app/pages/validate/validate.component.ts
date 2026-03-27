@@ -16,11 +16,15 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../services/api.service';
 import { DomSanitizer, SafeResourceUrl, SafeUrl } from '@angular/platform-browser';
 import { ZoomableImageViewerComponent } from '../../components/zoomable-image-viewer/zoomable-image-viewer.component';
+import {
+  BboxOverlayViewerComponent,
+  type AnchorIndicators,
+} from '../../components/bbox-overlay-viewer/bbox-overlay-viewer.component';
 
 @Component({
   standalone: true,
   selector: 'validate-page',
-  imports: [CommonModule, FormsModule, ZoomableImageViewerComponent],
+  imports: [CommonModule, FormsModule, ZoomableImageViewerComponent, BboxOverlayViewerComponent],
   templateUrl: './validate.component.html',
   styleUrl: './validate.component.css',
 })
@@ -50,6 +54,13 @@ export class ValidatePage implements OnInit, OnDestroy {
 
   // Input type: pdf_digital, pdf_scanned, image, other
   inputType: string | null = null;
+
+  /** OCR blocks with bbox (from /task/data); used by bbox overlay modal */
+  blocks: any[] = [];
+  /** Table regions from layout / PDF (same API as backend `table_regions`) */
+  tableRegions: any[] = [];
+  /** Task metadata from structured_data (includes anchor_indicators) */
+  taskMetadata: Record<string, unknown> | null = null;
 
   extracted: any = {
     document_type: '',
@@ -149,6 +160,20 @@ export class ValidatePage implements OnInit, OnDestroy {
       if (res?.ocr_content) {
         this.markdownContent = res.ocr_content;
       }
+      if (Array.isArray(res?.blocks)) {
+        this.blocks = res.blocks;
+      } else {
+        this.blocks = [];
+      }
+      if (Array.isArray(res?.table_regions)) {
+        this.tableRegions = res.table_regions;
+      } else {
+        this.tableRegions = [];
+      }
+      this.taskMetadata =
+        res?.metadata && typeof res.metadata === 'object'
+          ? (res.metadata as Record<string, unknown>)
+          : null;
     } catch { /* ignore */ }
 
     // Fallback: try /extraction/{fileId} for OCR content if not already loaded
@@ -351,6 +376,24 @@ export class ValidatePage implements OnInit, OnDestroy {
 
   get validationWarningList(): string[] {
     return Object.values(this.validationWarnings);
+  }
+
+  /** Typed anchor payload for overlay + badges */
+  get fuzzyAnchorIndicators(): AnchorIndicators | null {
+    const v = this.taskMetadata?.['anchor_indicators'];
+    if (!v || typeof v !== 'object') return null;
+    return v as AnchorIndicators;
+  }
+
+  /** Use rich overlay (OCR + tables + anchors) vs zoom-only modal */
+  get useBboxModal(): boolean {
+    if (this.blocks?.length || this.tableRegions?.length) return true;
+    const ai = this.fuzzyAnchorIndicators;
+    if (!ai) return false;
+    return (['vendor', 'customer', 'payment', 'line_item_header'] as const).some((k) => {
+      const x = ai[k];
+      return Boolean(x?.detected && Array.isArray(x.bbox) && x.bbox.length >= 4);
+    });
   }
 
   openImageModal() {

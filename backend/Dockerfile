@@ -5,5 +5,6 @@ LABEL org.opencontainers.image.description="Invoice Data Extractor Backend Servi
 WORKDIR /app
 
 COPY *.py .
+COPY services ./services
 RUN pip install fastapi uvicorn python-multipart httpx pymongo rapidfuzz scikit-learn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]

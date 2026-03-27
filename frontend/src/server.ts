@@ -6,23 +6,24 @@ import {
 } from '@angular/ssr/node';
 import express from 'express';
 import { join } from 'node:path';
+import process from 'node:process';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
 const angularApp = new AngularNodeAppEngine();
 
-/**
- * Example Express Rest API endpoints can be defined here.
- * Uncomment and define endpoints as necessary.
- *
- * Example:
- * ```ts
- * app.get('/api/{*splat}', (req, res) => {
- *   // Handle API request
- * });
- * ```
- */
+/** Same-origin API: browser calls /api/*; proxy forwards to FastAPI (avoids needing port 8001 on the client). */
+const apiTarget = process.env['API_BASE_URL'] ?? 'http://127.0.0.1:8001';
+app.use(
+  '/api',
+  createProxyMiddleware({
+    target: apiTarget,
+    changeOrigin: true,
+    pathRewrite: { '^/api': '' },
+  }),
+);
 
 /**
  * Serve static files from /browser

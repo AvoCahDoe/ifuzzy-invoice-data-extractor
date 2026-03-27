@@ -1,0 +1,95 @@
+<div
+  class="bbox-overlay-viewer"
+  [class.bbox-overlay-viewer--modal]="mode === 'modal'"
+>
+  <div class="bbox-overlay-viewer__toolbar" (click)="$event.stopPropagation()">
+    <span class="bbox-overlay-viewer__label">{{ (zoom * 100) | number: '0.0-0' }}%</span>
+    <div class="bbox-overlay-viewer__controls">
+      <button
+        type="button"
+        class="bbox-overlay-viewer__btn"
+        (click)="zoomOut()"
+        [disabled]="zoom <= ZOOM_MIN"
+        title="Zoom out (−)"
+      >
+        −
+      </button>
+      <button
+        type="button"
+        class="bbox-overlay-viewer__btn"
+        (click)="zoomIn()"
+        [disabled]="zoom >= ZOOM_MAX"
+        title="Zoom in (+)"
+      >
+        +
+      </button>
+      <button type="button" class="bbox-overlay-viewer__btn" (click)="zoomReset()" title="Reset zoom">
+        ⟲
+      </button>
+    </div>
+    <button
+      type="button"
+      class="bbox-overlay-viewer__btn bbox-overlay-viewer__btn--toggle"
+      (click)="toggleBoxes()"
+      [attr.title]="showBoxes ? 'Hide overlays' : 'Show overlays'"
+    >
+      {{ showBoxes ? 'Hide overlays' : 'Show overlays' }}
+    </button>
+    <small class="bbox-overlay-viewer__hint">Ctrl+scroll · OCR (green/amber/red) · tables (dashed) · anchors (solid)</small>
+    <button
+      *ngIf="showClose"
+      type="button"
+      class="bbox-overlay-viewer__btn bbox-overlay-viewer__btn--close"
+      (click)="onClose()"
+      title="Close"
+    >
+      ×
+    </button>
+  </div>
+  <div class="bbox-overlay-viewer__body" (wheel)="onWheel($event)">
+    <div class="bbox-overlay-viewer__frame">
+      <img
+        #coverImg
+        *ngIf="imageUrl"
+        [src]="imageUrl"
+        [alt]="alt"
+        class="bbox-overlay-viewer__img"
+        [style.width.%]="zoom * 100"
+        (load)="onImageLoad($event)"
+      />
+      <!-- Raster coords: OCR blocks, detected tables, fuzzy anchors (page 0). -->
+      <div
+        *ngIf="showBoxes && hasAnyOverlay"
+        class="bbox-overlay-viewer__layer"
+        aria-hidden="true"
+      >
+        <div
+          *ngFor="let box of boxLayouts"
+          class="bbox-overlay-viewer__box"
+          [class.bbox-overlay-viewer__box--high]="box.cls === 'high'"
+          [class.bbox-overlay-viewer__box--mid]="box.cls === 'mid'"
+          [class.bbox-overlay-viewer__box--low]="box.cls === 'low'"
+          [style.left.px]="box.left"
+          [style.top.px]="box.top"
+          [style.width.px]="box.width"
+          [style.height.px]="box.height"
+          [attr.data-tooltip]="formatTooltip(box)"
+        ></div>
+        <div
+          *ngFor="let ex of extraLayouts"
+          class="bbox-overlay-viewer__extra"
+          [class.bbox-overlay-viewer__extra--table]="ex.kind === 'table'"
+          [class.bbox-overlay-viewer__extra--anchor-vendor]="ex.kind === 'anchor' && ex.anchorRole === 'vendor'"
+          [class.bbox-overlay-viewer__extra--anchor-customer]="ex.kind === 'anchor' && ex.anchorRole === 'customer'"
+          [class.bbox-overlay-viewer__extra--anchor-payment]="ex.kind === 'anchor' && ex.anchorRole === 'payment'"
+          [class.bbox-overlay-viewer__extra--anchor-line]="ex.kind === 'anchor' && ex.anchorRole === 'line_item_header'"
+          [style.left.px]="ex.left"
+          [style.top.px]="ex.top"
+          [style.width.px]="ex.width"
+          [style.height.px]="ex.height"
+          [attr.data-tooltip]="ex.tooltip"
+        ></div>
+      </div>
+    </div>
+  </div>
+</div>

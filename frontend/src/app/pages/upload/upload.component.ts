@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ApiService } from '../../services/api.service';
 
 @Component({
@@ -68,7 +69,16 @@ export class UploadPage {
     } catch (e) {
       console.error(e);
       this.uploading = false;
-      alert('Échec du téléversement.');
+      let detail = '';
+      if (e instanceof HttpErrorResponse) {
+        detail =
+          e.status === 0
+            ? ' (serveur injoignable — vérifiez que l’API tourne ou rechargez la page)'
+            : e.error?.detail
+              ? ` (${typeof e.error.detail === 'string' ? e.error.detail : JSON.stringify(e.error)})`
+              : ` (HTTP ${e.status})`;
+      }
+      alert(`Échec du téléversement.${detail}`);
     }
   }
 
